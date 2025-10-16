@@ -1,0 +1,13 @@
+{
+  "shell_port": 60253,
+  "iopub_port": 45879,
+  "stdin_port": 39429,
+  "control_port": 54359,
+  "hb_port": 54281,
+  "ip": "127.0.0.1",
+  "key": "074ed020-9d3aa74530cd9960298c9a4b",
+  "transport": "tcp",
+  "signature_scheme": "hmac-sha256",
+  "kernel_name": "ahp_env",
+  "jupyter_session": "/root/src/attacks/Untitled.ipynb"
+}

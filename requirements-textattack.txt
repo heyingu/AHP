@@ -1,0 +1,17 @@
+# requirements-textattack.txt
+
+absl-py
+datasets
+PyYAML
+requests
+scipy
+torch
+tqdm
+transformers
+bert-score
+language-tool-python
+lemminflect
+lru-dict
+nltk
+pinyin
+pybind11

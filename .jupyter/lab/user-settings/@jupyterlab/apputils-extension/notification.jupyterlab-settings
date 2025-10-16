@@ -1,0 +1,14 @@
+{
+    // 通知
+    // @jupyterlab/apputils-extension:notification
+    // 通知设置
+    // *******************************************
+
+    // 检查JupyterLab 更新
+    // 是否检查 JupyterLab 的新版本。需要将 `fetchNews` 设置为 Always（`true`）才能生效。如果为 `true`，将向一个网站发送请求。
+    "checkForUpdates": false,
+
+    // 获取Jupyter官方新闻
+    // 是否从 Jupyter 新闻源获取新闻。如果设置为 Always（`true`），将向一个网站发送请求。
+    "fetchNews": "false"
+}

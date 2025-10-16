@@ -1,0 +1,30 @@
+# --- 核心框架 (Core Framework) ---
+transformers
+accelerate
+bitsandbytes
+sentence-transformers
+scikit-learn
+
+# --- 论文参考项目依赖 (From SelfDenoise requirements.txt) ---
+sentencepiece
+nltk
+scipy
+tensorboard
+pypinyin
+statsmodels
+lemminflect
+language_tool_python
+bert_score
+editdistance
+datasets
+terminaltables
+openai
+py-cpuinfo
+lru-dict
+flair
+fire
+
+# --- 方案中提到的其他工具库 (Other utilities from your plan) ---
+pandas
+numpy
+tqdm

@@ -1,0 +1,13 @@
+{
+  "shell_port": 60603,
+  "iopub_port": 59013,
+  "stdin_port": 46413,
+  "control_port": 46925,
+  "hb_port": 35387,
+  "ip": "127.0.0.1",
+  "key": "d81ffde7-d1f725d359485e3b43c5f7d7",
+  "transport": "tcp",
+  "signature_scheme": "hmac-sha256",
+  "kernel_name": "ahp_env",
+  "jupyter_session": "/root/src/pruning/Untitled.ipynb"
+}

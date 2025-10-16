@@ -1,0 +1,9 @@
+__pycache__/
+.ipynb_checkpoints/
+autodl-tmp/
+ahp_env/
+miniconda3/
+autodl-pub/
+nltk_data/
+.cache/
+.ssh/
