@@ -4,12 +4,17 @@ from src.pruning.base_pruner import BasePruner # <--- 修改点
 from src.models.model_loader import load_nli_model
 import torch
 from tqdm.auto import tqdm
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 class NliPruner(BasePruner):
     """
     使用自然语言推理 (NLI) 进行剪枝。
     选择与原始文本构成"蕴含"关系且置信度最高的K个候选。
     """
+    def __init__(self, k_val, device):
+        self.device = device
+        super().__init__(k_val)
+        
     def load_model(self):
         # 加载预训练的NLI模型
         model, tokenizer = load_nli_model(model_name="roberta-large-mnli")

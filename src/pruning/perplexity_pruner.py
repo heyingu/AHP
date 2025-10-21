@@ -4,12 +4,17 @@ from .base_pruner import BasePruner
 from src.models.model_loader import load_main_llm # 这里我们复用主模型加载器来加载一个中小型模型
 import torch
 from tqdm.auto import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 class PerplexityPruner(BasePruner):
     """
     使用困惑度 (PPL) 进行剪枝。
     选择语言模型认为最流畅（PPL最低）的K个候选。
     """
+    def __init__(self, k_val, device):
+        self.device = device
+        super().__init__(k_val)
+        
     def load_model(self):
         # 为保证效率，使用一个中小型模型如GPT-2来计算PPL
         # 注意：这里也可以选择加载一个独立的、更小的模型

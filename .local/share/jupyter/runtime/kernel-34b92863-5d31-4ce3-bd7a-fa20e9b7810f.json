@@ -1,0 +1,13 @@
+{
+  "shell_port": 39677,
+  "iopub_port": 50123,
+  "stdin_port": 35103,
+  "control_port": 41331,
+  "hb_port": 32949,
+  "ip": "127.0.0.1",
+  "key": "6f4e1528-9ef8165047c43a53a3278e6a",
+  "transport": "tcp",
+  "signature_scheme": "hmac-sha256",
+  "kernel_name": "ahp_env",
+  "jupyter_session": "/root/notebooks/01_experiment_pruning_rules.ipynb"
+}

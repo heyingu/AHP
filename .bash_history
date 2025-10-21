@@ -172,3 +172,33 @@ git add .
 git commit -m "Initial commit"
 git remote add origin git@github.com:heyingu/AHP.git
 git push -u origin main
+source /etc/network_turbo
+cd autodl-tmp
+rm -rf alpaca-lora-7b
+git clone https://huggingface.co/circulus/alpaca-7b
+python model_download.py
+python model_download.py
+cd ~
+pip install huggingface_hub
+pip unstall huggingface_hub
+conda activate ahp_env
+conda inti
+conda init
+conda activate ahp_env
+cd ~
+conda activate ahp_env
+conda init
+conda activate ahp_env
+source ahp_env/bin/activate
+pip install huggingface_hub
+python model_download.py
+cd src/models/
+python model_download.py
+rm -rf alpaca-lora-7b
+python model_download.py
+cd ~
+source ahp_env/bin/activate
+pip unstall huggingface_hub install -i https://pypi.tuna.tsinghua.edu.cn/simple --force-reinstall "textattack[tensorflow,torch,flair]==0.3.9" num2words word2number
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple --force-reinstall "textattack[tensorflow,torch,flair]==0.3.9" num2words word2number
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple tensorflow_hub
+git add .
