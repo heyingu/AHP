@@ -1,0 +1,14 @@
+{
+ "argv": [
+  "/root/miniconda3/envs/ahp_s/bin/python",
+  "-m",
+  "ipykernel_launcher",
+  "-f",
+  "{connection_file}"
+ ],
+ "display_name": "Python (ahp_s)",
+ "language": "python",
+ "metadata": {
+  "debugger": true
+ }
+}

@@ -1,60 +1,45 @@
 # ahp_robustness/src/pruning/nli_pruner.py
 
-from src.pruning.base_pruner import BasePruner # <--- 修改点
+from src.pruning.base_pruner import BasePruner
 from src.models.model_loader import load_nli_model
 import torch
 from tqdm.auto import tqdm
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 class NliPruner(BasePruner):
-    """
-    使用自然语言推理 (NLI) 进行剪枝。
-    选择与原始文本构成"蕴含"关系且置信度最高的K个候选。
-    """
     def __init__(self, k_val, device):
-        self.device = device
+        # 1. 首先，调用父类的构造函数
         super().__init__(k_val)
         
+        # 2. 然后，设置自己独有的属性
+        self.device = device
+        
+        # 3. 最后，在所有必需的属性都设置好之后，再加载模型
+        self.nli_model, self.nli_tokenizer = self.load_model()
+
     def load_model(self):
-        # 加载预训练的NLI模型
-        model, tokenizer = load_nli_model(model_name="roberta-large-mnli")
-        model.to("cuda" if torch.cuda.is_available() else "cpu")
+        model, tokenizer = load_nli_model()
+        # self.device 在此时已经存在了
+        model.to(self.device)
         model.eval()
         return model, tokenizer
 
-    def prune(self, original_text, candidates):
+    def prune(self, original_sentence, candidates):
         if not candidates:
             return []
-        
-        model, tokenizer = self.model
-        scores = []
 
-        # print("正在计算候选句子的NLI蕴含分数...")
-        for hypothesis in tqdm(candidates, desc="Calculating NLI Scores"):
-            try:
-                # NLI模型输入格式：[CLS] premise [SEP] hypothesis [SEP]
-                tokenized_input = tokenizer(original_text, hypothesis, return_tensors='pt', truncation=True, padding=True).to(model.device)
+        scores = []
+        with torch.no_grad():
+            for candidate in tqdm(candidates, desc="Calculating NLI Scores", leave=False):
+                inputs = self.nli_tokenizer(original_sentence, candidate, return_tensors='pt', truncation=True, padding=True).to(self.device)
+                outputs = self.nli_model(**inputs)
                 
-                with torch.no_grad():
-                    outputs = model(**tokenized_input)
-                
-                # 获取预测的logits，并转换为概率
                 probs = torch.softmax(outputs.logits, dim=-1)
                 
-                # NLI模型的标签通常是: 0 -> contradiction, 1 -> neutral, 2 -> entailment
-                # 我们需要蕴含（entailment）的概率
-                entailment_prob = probs[0][2].item()
+                entailment_prob = probs[0, 2].item() 
                 scores.append(entailment_prob)
-            except Exception:
-                scores.append(0.0) # 如果出错，给一个最低分
 
-        # 将候选和其分数配对
-        candidate_scores = list(zip(candidates, scores))
+        scored_candidates = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)
         
-        # 按蕴含分数降序排序
-        sorted_candidates = sorted(candidate_scores, key=lambda x: x[1], reverse=True)
-        
-        # 选择分数最高的K个候选
-        pruned_candidates = [candidate for candidate, score in sorted_candidates[:self.k]]
+        pruned_candidates = [candidate for candidate, score in scored_candidates[:self.k]]
         
         return pruned_candidates

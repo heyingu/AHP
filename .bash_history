@@ -202,3 +202,49 @@ pip unstall huggingface_hub install -i https://pypi.tuna.tsinghua.edu.cn/simple 
 pip install -i https://pypi.tuna.tsinghua.edu.cn/simple --force-reinstall "textattack[tensorflow,torch,flair]==0.3.9" num2words word2number
 pip install -i https://pypi.tuna.tsinghua.edu.cn/simple tensorflow_hub
 git add .
+source ~/.bashrc
+ls -alh
+du -sh .git
+du -sh 
+du -sh ahp_env
+du -sh src
+du -sh 
+du -sh .cache
+du -h
+# 只看一级子目录的大小
+du -h --max-depth=1
+du -h --max-depth=1 ~/.cache
+# 使用 huggingface-cli
+huggingface-cli scan-cache
+# 上面的命令会扫描并让你交互式地选择删除哪些缓存# 使用 huggingface-cli
+huggingface-cli scan-cache
+# 上面的命令会扫描并让你交互式地选择删除哪些缓
+du -h --max-depth=1 ~/.cache
+mv ~/.cache /root/autodl-tmp/cache
+ln -s /root/autodl-tmp/cache ~/.cache
+ls -l ~
+ls -alh
+source ~/.bashrc
+conda create -n ahp_s python=3.10 -y
+cd ~
+conda activate ahp_s
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple     transformers     accelerate     bitsandbytes     sentence-transformers     scikit-learn     pandas     numpy     tqdm     jupyterlab     ipywidgets
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple     textattack     num2words     word2number     tensorflow_hub
+python -m ipykernel install --user --name=ahp_s --display-name="Python (ahp_s)"
+pip uninstall torch torchvision torchaudio -y
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip list
+pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
+pip install --upgrade --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
+pip3 install torch torchvision
+pip listh
+pip list
+pip unstall torch
+pip uninstall torch
+pip uninstall torch torchvision torchaudio
+pip3 install torch torchvision
+cd ~
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+conda activate ahp_s
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128

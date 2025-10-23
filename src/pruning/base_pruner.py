@@ -16,7 +16,7 @@ class BasePruner(ABC):
             k_val (int): 剪枝后要保留的最优候选数量。
         """
         self.k = k_val # 将传入的 k_val 赋值给实例变量 self.k
-        self.model = self.load_model()
+        # self.model = self.load_model()
 
     @abstractmethod
     def load_model(self):
