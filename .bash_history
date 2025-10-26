@@ -248,3 +248,15 @@ cd ~
 pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 conda activate ahp_s
 pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+git add .
+git init
+git add .
+source ahp_env/bin/activate
+cd ~
+source ahp_env/bin/activate
+pip install num2words
+pip install -i https://pypi.org/simple num2words
+git commit -m "four"
+cd /root/autodl=tmp
+cd /root/autodl-tmp
+zip -r circulus_alpaca-7b.zip circulus_alpaca-7b/

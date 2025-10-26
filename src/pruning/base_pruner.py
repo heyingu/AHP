@@ -1,75 +1,37 @@
-# # ahp_robustness/src/pruning/base_pruner.py
-
-
+# src/pruning/base_pruner.py
+import logging
 from abc import ABC, abstractmethod
+from typing import List, Any
 
 class BasePruner(ABC):
     """
-    所有剪枝器实现的抽象基类。
+    所有剪枝器方法的抽象基类。
     """
-    # --- 关键修改点 ---
-    # 将参数名从 'k' 修改为 'k_val' 以匹配 pipeline 中的调用
-    def __init__(self, k_val):
+    def __init__(self, threshold: Any):
         """
-        初始化剪枝器。
-        Args:
-            k_val (int): 剪枝后要保留的最优候选数量。
-        """
-        self.k = k_val # 将传入的 k_val 赋值给实例变量 self.k
-        # self.model = self.load_model()
-
-    @abstractmethod
-    def load_model(self):
-        """
-        加载此剪枝方法所需的模型。
-        """
-        pass
-
-    @abstractmethod
-    def prune(self, original_text, candidates):
-        """
-        执行剪枝操作。
+        初始化基类。
 
         Args:
-            original_text (str): 原始未遮蔽的输入文本。
-            candidates (list[str]): 由LLM生成的M个候选句子。
+            threshold (Any): 用于剪枝的阈值或参数，具体含义由子类定义。
+        """
+        self.threshold = threshold
+        logging.info(f"初始化 {self.__class__.__name__}，阈值/参数: {self.threshold}")
+
+    @abstractmethod
+    def prune(self, original_text: str, candidates: List[str], **kwargs) -> List[str]:
+        """
+        根据特定规则剪枝候选句子列表。
+
+        Args:
+            original_text (str): 原始输入文本，可能用于比较或计算。
+            candidates (List[str]): 待剪枝的候选句子列表。
+            **kwargs: 其他可能需要的上下文信息 (例如 masked_text)。
 
         Returns:
-            list[str]: 经过筛选后的K个最优候选句子。
+            List[str]: 通过剪枝规则筛选后保留的候选句子列表。
         """
-        pass
-# from abc import ABC, abstractmethod
+        raise NotImplementedError("子类必须实现 prune 方法")
 
-# class BasePruner(ABC):
-#     """
-#     所有剪枝器实现的抽象基类。
-#     """
-#     def __init__(self, k):
-#         """
-#         初始化剪枝器。
-#         Args:
-#             k (int): 剪枝后要保留的最优候选数量。
-#         """
-#         self.k = k
-#         self.model = self.load_model()
-
-#     @abstractmethod
-#     def load_model(self):
-#         """
-#         加载此剪枝方法所需的模型。
-#         """
-#         pass
-
-#     @abstractmethod
-#     def prune(self, original_text, candidates):
-#         """
-#         执行剪枝操作。
-
-#         Args:
-#             original_text (str): 原始未遮蔽的输入文本。
-#             candidates (list[str]): 由LLM生成的M个候选句子。
-
-#         Returns:
-#             list[str]: 经过筛选后的K个最优候选句子。
-#         """
-#         pass
+    def __call__(self, original_text: str, candidates: List[str], **kwargs) -> List[str]:
+        """使剪枝器对象可以像函数一样被调用。"""
+        return self.prune(original_text, candidates, **kwargs)
