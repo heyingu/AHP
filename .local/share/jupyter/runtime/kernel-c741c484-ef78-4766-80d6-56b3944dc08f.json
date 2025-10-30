@@ -1,0 +1,13 @@
+{
+  "shell_port": 34437,
+  "iopub_port": 51597,
+  "stdin_port": 56827,
+  "control_port": 46099,
+  "hb_port": 51541,
+  "ip": "127.0.0.1",
+  "key": "4f49238e-0c7f607f8941e612db1d92b6",
+  "transport": "tcp",
+  "signature_scheme": "hmac-sha256",
+  "kernel_name": "ahp_env",
+  "jupyter_session": "/root/notebooks/dataset_download.ipynb"
+}

@@ -1,0 +1,2 @@
+dataset,model,defense,attack,num_examples,accuracy,attack_success_rate,avg_perturbed_words,avg_queries,query_budget
+agnews,alpaca-native,none,deepwordbug,20,1.0,0.0,0,142.83333333333334,200

@@ -1,0 +1,8 @@
+dataset,model,defense,attack,num_examples,accuracy,attack_success_rate,avg_perturbed_words,avg_queries,query_budget,mask_rate,denoiser,ensemble_size
+sst2,circulus_alpaca-7b,selfdenoise,bertattack,20,0.0,0.0,0.0,0.0,200,0.15,alpaca,30.0
+sst2,alpaca-native,none,pwws,20,0.2777777777777778,0.7222222222222222,2.0,111.0,200,,,
+sst2,alpaca-native,none,pwws,20,0.2777777777777778,0.7222222222222222,2.0,111.0,200,,,
+agnews,alpaca-native,none,pwws,20,0.0,0.0,0.0,0.0,200,,,
+agnews,alpaca-native,none,pwws,20,0.0,0.0,0.0,0.0,200,,,
+agnews,alpaca-native,none,pwws,20,1.0,0.0,0.0,200.0,200,,,
+agnews,alpaca-native,none,pwws,20,1.0,0.0,0.0,200.0,200,,,

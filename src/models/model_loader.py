@@ -10,26 +10,20 @@ import copy # 用于深拷贝列表等
 import random
 import gc # 引入垃圾回收器，用于清理 GPU 显存
 
-# --- 导入 AHP 组件 (请根据您的项目结构调整路径) ---
 try:
-    # 假设 args_config 在 src 目录下
-    from ..args_config import AHPSettings
-    # 假设 masking, candidate_generation, result_aggregation 在 src/components/ 目录下
+    from ..args_config import AHPSettings 
     from ..components.masking import AdversarialMasker, RandomMasker
-    from ..components.candidate_generation import CandidateGenerator
-    from ..components.result_aggregation import aggregate_results # 导入您的聚合函数
-    # 假设 base_pruner 和具体的剪枝器都在 src/pruning/ 目录下
+    from ..components.candidate_generation import CandidateGenerator # <--- 确保导入
     from ..pruning.base_pruner import BasePruner
     from ..pruning import PerplexityPruner, SemanticPruner, NLIPruner, ClusteringPruner
+    from ..components.result_aggregation import aggregate_results
 except ImportError as e:
-     # 如果导入失败，记录错误并提示用户检查路径
      logging.error(f"无法导入 AHP 组件，请检查 model_loader.py 中的导入路径: {e}")
-     # 定义临时的占位符类/函数，使得代码在缺少组件时也能运行（但功能不完整）
+     # ... (占位符定义) ...
      class BasePruner: pass
      class AdversarialMasker: pass
      class CandidateGenerator: pass
-     def aggregate_results(*args, **kwargs): return np.array([0.5, 0.5]) # 返回一个默认的均匀分布概率
-     logging.warning("由于导入错误，AHP 组件将使用占位符。AHP 防御将无法正常工作。")
+     def aggregate_results(*args, **kwargs): return np.array([0.5, 0.5])
 
 
 # --- 定义 Prompt 模板 (来自 SelfDenoise/alpaca.py 和您的 Notebook) ---
@@ -98,53 +92,38 @@ Business
 
 
 class AlpacaModel:
-    """封装 Alpaca 模型加载、预测以及集成 AHP 和 SelfDenoise 防御逻辑的类。"""
     def __init__(self, args: AHPSettings):
-        """
-        初始化 AlpacaModel。
-
-        Args:
-            args (AHPSettings): 包含所有配置参数的对象。
-        """
         self.args = args
-        self.device = torch.device(args.device) # 设置计算设备 (cuda 或 cpu)
-        self.tokenizer: Optional[transformers.PreTrainedTokenizer] = None # 分词器
-        self.model: Optional[transformers.PreTrainedModel] = None # Alpaca 模型
-        self.roberta_tokenizer: Optional[RobertaTokenizer] = None # RoBERTa 分词器 (用于 SelfDenoise 去噪)
-        self.roberta_model: Optional[RobertaForMaskedLM] = None # RoBERTa 模型 (用于 SelfDenoise 去噪)
+        self.device = torch.device(args.device)
+        self.tokenizer: Optional[transformers.PreTrainedTokenizer] = None 
+        self.model: Optional[transformers.PreTrainedModel] = None 
+        self.roberta_tokenizer: Optional[RobertaTokenizer] = None 
+        self.roberta_model: Optional[RobertaForMaskedLM] = None 
         self._load_model() # 加载主模型
 
-        # --- AHP 和 SelfDenoise 组件初始化 (惰性加载或在使用时加载) ---
-        self.adversarial_masker: Optional[AdversarialMasker] = None # 对抗性遮蔽器
-        self.random_masker: Optional[RandomMasker] = None # 随机遮蔽器
-        self.candidate_generator: Optional[CandidateGenerator] = None # 候选生成器
-        self.pruner: Optional[BasePruner] = None # 剪枝器 (具体类型在 AHP 流程中确定)
+        # --- AHP 和 SelfDenoise 组件初始化 ---
+        self.adversarial_masker: Optional[AdversarialMasker] = None 
+        self.random_masker: Optional[RandomMasker] = None 
+        self.candidate_generator: Optional[CandidateGenerator] = None # <--- 添加属性
+        self.pruner: Optional[BasePruner] = None 
 
-        # --- 根据数据集名称设置模型的特定指令和标签信息 ---
         self.set_dataset_mode(args.dataset_name)
-
-        # --- 在初始化时就准备好可能需要的遮蔽器 ---
-        self._initialize_maskers()
+        self._initialize_maskers() # 调用初始化遮蔽器的方法
 
     def _initialize_maskers(self):
         """根据配置的防御方法，初始化所需的遮蔽器。"""
-        # 如果防御方法是 AHP，且对抗性遮蔽器尚未初始化
         if self.args.defense_method == 'ahp' and self.adversarial_masker is None:
              try:
-                 # 实例化对抗性遮蔽器 (您需要确保 AdversarialMasker 类已正确实现)
-                 # 它通常需要模型、分词器和设备信息来计算词语重要性
-                 self.adversarial_masker = AdversarialMasker(self.model, self.tokenizer, device=self.device)
+                 # --- 修改这里 ---
+                 # 传递 self (AlpacaModel 实例)
+                 self.adversarial_masker = AdversarialMasker(self) 
+                 # --- 修改结束 ---
                  logging.info("已初始化 AHP 所需的对抗性遮蔽器。")
-             except NameError: # 如果 AdversarialMasker 类未定义或导入失败
-                 logging.error("AdversarialMasker 类未找到或未实现。")
-                 raise RuntimeError("AHP 防御需要 AdversarialMasker，但它不可用。")
-             except Exception as e: # 捕获其他可能的初始化错误
-                 logging.error(f"初始化 AdversarialMasker 时出错: {e}")
+             except Exception as e:
+                 logging.error(f"初始化 AdversarialMasker 时出错: {e}", exc_info=True)
                  raise e
 
-        # 如果防御方法是 SelfDenoise，且随机遮蔽器尚未初始化
         if self.args.defense_method == 'selfdenoise' and self.random_masker is None:
-            # 实例化随机遮蔽器
             self.random_masker = RandomMasker(self.tokenizer, mask_token=self.args.mask_token, mask_rate=self.args.mask_rate)
             logging.info("已初始化 SelfDenoise 所需的随机遮蔽器。")
 
@@ -237,49 +216,36 @@ class AlpacaModel:
         logging.info(f"模型已设置为处理数据集: {dataset_name}")
 
     def _get_pruner(self) -> Optional[BasePruner]:
-        """
-        根据配置参数，按需初始化并返回 AHP 剪枝器实例。
-        如果已初始化且类型匹配，则返回缓存的实例。
-        """
+        """[已修改] 根据配置参数，按需初始化并返回 AHP 剪枝器实例。"""
         method = self.args.ahp_pruning_method
-        threshold = self.args.ahp_pruning_threshold # 注意：这个参数的含义取决于剪枝方法
+        threshold = self.args.ahp_pruning_threshold 
 
-        # 如果剪枝器已存在，并且其类型与当前配置的方法匹配，则直接返回
-        # (通过类名的小写前缀来简单判断类型是否匹配)
         if self.pruner is not None and self.pruner.__class__.__name__.lower().startswith(method):
-             return self.pruner
+             return self.pruner 
 
         logging.info(f"正在初始化剪枝器: {method}，参数/阈值: {threshold}")
         try:
-            # 根据方法名称选择并初始化对应的剪枝器类
-            # 您需要确保这些剪枝器类已正确实现并可以导入
+            # --- 确保剪枝器在初始化时接收到所需的模型/分词器 ---
             if method == 'perplexity':
-                # 困惑度剪枝器，需要模型、分词器和阈值
+                # PerplexityPruner 需要主模型
                 self.pruner = PerplexityPruner(self.model, self.tokenizer, threshold=threshold, device=self.device)
             elif method == 'semantic':
-                # 语义相似度剪枝器，需要一个嵌入模型 (可能在类内部加载) 和阈值
+                # SemanticPruner 加载自己的模型，不需要主模型
                 self.pruner = SemanticPruner(threshold=threshold, device=self.device)
             elif method == 'nli':
-                 # NLI (自然语言推断) 剪枝器，需要一个 NLI 模型和阈值
+                 # NLIPruner 加载自己的模型，不需要主模型
                 self.pruner = NLIPruner(threshold=threshold, device=self.device)
             elif method == 'clustering':
-                 # 聚类剪枝器，需要嵌入模型，并且参数通常是簇的数量 (n_clusters)
-                 # 我们将 threshold 强制转换为整数作为簇数
+                 # ClusteringPruner 加载自己的模型，不需要主模型
                  self.pruner = ClusteringPruner(n_clusters=int(threshold), device=self.device)
             elif method == 'none':
-                # 不使用剪枝
                 self.pruner = None
             else:
-                # 配置了未知的剪枝方法
                 raise ValueError(f"未知的剪枝方法: {method}")
-            # 返回新创建或已缓存的剪枝器实例
             return self.pruner
-        except NameError as e: # 如果对应的剪枝器类未定义或导入失败
-             logging.error(f"方法 '{method}' 对应的剪枝器类未找到或未实现: {e}")
-             raise RuntimeError(f"需要剪枝器 '{method}' 但其不可用。")
-        except Exception as e: # 捕获其他初始化错误
-             logging.error(f"初始化剪枝器 '{method}' 时出错: {e}")
-             raise e
+        except Exception as e: 
+             logging.error(f"初始化剪枝器 '{method}' 时出错: {e}", exc_info=True)
+             raise RuntimeError(f"无法初始化剪枝器 '{method}'")
 
 
     def _format_prompt(self, instruction: str, input_text: str) -> str:
@@ -357,119 +323,91 @@ class AlpacaModel:
 
 
     def _apply_ahp_defense(self, texts: List[str]) -> List[np.ndarray]:
-        """
-        应用完整的 AHP (对抗性层次处理) 防御流程。
-
-        Args:
-            texts (List[str]): 需要进行防御和预测的原始文本列表。
-
-        Returns:
-            List[np.ndarray]: 每个输入文本对应的最终聚合概率分布列表。
-        """
+        """[已修改] 应用完整的 AHP (对抗性层次处理) 防御流程。"""
         logging.info("正在应用 AHP 防御...")
-        final_aggregated_probs = [] # 存储每个文本最终的聚合概率
+        final_aggregated_probs = []
 
-        # --- 初始化 AHP 组件 (如果尚未完成) ---
-        # 确保遮蔽器已初始化
+        # --- 确保 AHP 组件已初始化 ---
         if self.adversarial_masker is None:
              self._initialize_maskers()
              if self.adversarial_masker is None:
                  raise RuntimeError("对抗性遮蔽器未能初始化，无法执行 AHP 防御。")
+        
         # 确保候选生成器已初始化
         if self.candidate_generator is None:
             try:
-                # 假设 CandidateGenerator 需要模型和分词器
-                self.candidate_generator = CandidateGenerator(self.model, self.tokenizer, num_candidates=self.args.ahp_num_candidates, device=self.device)
+                # --- 修改这里 ---
+                # 实例化时传入 self (AlpacaModel 实例)
+                self.candidate_generator = CandidateGenerator(self)
+                # --- 修改结束 ---
                 logging.info("已初始化候选生成器。")
-            except NameError:
-                 logging.error("CandidateGenerator 类未找到或未实现。")
-                 raise RuntimeError("AHP 防御需要 CandidateGenerator，但它不可用。")
             except Exception as e:
-                 logging.error(f"初始化 CandidateGenerator 时出错: {e}")
-                 raise e
+                 logging.error(f"初始化 CandidateGenerator 时出错: {e}", exc_info=True)
+                 raise RuntimeError("无法初始化 CandidateGenerator")
 
-        # 获取剪枝器实例 (如果配置了剪枝方法，这里会惰性初始化)
-        current_pruner = self._get_pruner()
+        current_pruner = self._get_pruner() # 获取剪枝器实例
 
-        # --- 逐个处理输入文本 ---
-        # 使用 tqdm 显示 AHP 防御的进度
-        for text in tqdm(texts, desc="AHP 防御流程", leave=False, ncols=100):
+        # --- 逐个处理文本 (使用 enumerate 获取索引) ---
+        for text_idx, text in enumerate(tqdm(texts, desc="AHP 防御流程", leave=False, ncols=100)):
             try:
-                # --- 1. 对抗性遮蔽 ---
-                # 调用对抗性遮蔽器的 mask_input 方法
-                # 假设它返回遮蔽后的文本 (masked_text) 和被遮蔽词的索引 (masked_indices)
+                # 1. 对抗性遮蔽
+                # (现在会调用已完善的 _calculate_word_importance)
                 masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
-                logging.debug(f"AHP 遮蔽后文本 (前 50 字符): {masked_text[:50]}...")
-                logging.debug(f"AHP 遮蔽索引: {masked_indices}")
+                logging.debug(f"AHP Masked Text: {masked_text}")
 
-                # --- 2. 候选生成 ---
-                # 基于遮蔽后的文本生成多个候选句子
-                # 假设 generate_candidates 返回一个字符串列表
+                # 2. 候选生成
+                # (现在会调用已完善的 generate_candidates)
                 candidates = self.candidate_generator.generate_candidates(masked_text)
-                logging.debug(f"为 '{text[:20]}...' 生成了 {len(candidates)} 个候选。")
+                logging.debug(f"Generated {len(candidates)} candidates.")
 
-                # 处理未能生成候选的情况
+                # (处理无候选的情况)
                 if not candidates:
-                    logging.warning(f"未能为文本 '{text[:50]}...' 生成任何候选。将尝试直接预测遮蔽文本。")
-                    # Fallback: 直接预测遮蔽后的文本
+                    logging.warning(f"No candidates generated for: {text[:50]}... Skipping pruning/prediction.")
                     candidate_prompts = [self._format_prompt(self.classification_instruction, masked_text)]
                     probs_tensor = self._get_logit_probs_batch(candidate_prompts)
-                    all_candidate_probs = probs_tensor.numpy() # [1, num_labels]
+                    all_candidate_probs = probs_tensor.numpy()
                 else:
-                    # --- 3. 剪枝 ---
+                    # 3. 剪枝
                     if current_pruner:
-                        # 调用剪枝器的 prune 方法，传入原始文本、候选列表和遮蔽文本作为上下文
                         pruned_candidates = current_pruner.prune(original_text=text, candidates=candidates, masked_text=masked_text)
-                        logging.debug(f"使用 {self.args.ahp_pruning_method} 剪枝后剩余 {len(pruned_candidates)} 个候选。")
-                        # 处理剪枝后没有候选剩余的情况
+                        logging.debug(f"Pruned to {len(pruned_candidates)} candidates using {self.args.ahp_pruning_method}.")
                         if not pruned_candidates:
-                             logging.warning("剪枝操作移除了所有候选。将使用剪枝前的所有候选进行预测。")
-                             pruned_candidates = candidates # Fallback: 使用所有未剪枝的候选
+                             logging.warning("Pruning removed all candidates. Predicting on original candidates.")
+                             pruned_candidates = candidates 
                     else:
-                        # 如果没有配置剪枝方法
                         pruned_candidates = candidates
-                        logging.debug("未应用剪枝。")
+                        logging.debug("No pruning applied.")
 
-                    # --- 4. 对剪枝后的候选进行预测 (分批处理) ---
-                    # 为每个候选构建分类 Prompt
+                    # 4. 预测 (分批)
                     candidate_prompts = [self._format_prompt(self.classification_instruction, cand) for cand in pruned_candidates]
-                    candidate_probs_list = [] # 存储每个批次的预测概率
-                    # 按照配置的模型批次大小进行分批预测
+                    candidate_probs_list = []
                     for i in range(0, len(candidate_prompts), self.args.model_batch_size):
-                        batch_prompts = candidate_prompts[i : i + self.args.model_batch_size]
-                        # 获取这批候选的预测概率 (Tensor)
+                        batch_prompts = candidate_prompts[i:i + self.args.model_batch_size]
                         probs_tensor = self._get_logit_probs_batch(batch_prompts)
                         candidate_probs_list.append(probs_tensor)
 
-                    # 检查是否成功获取了概率
                     if not candidate_probs_list:
-                         logging.error(f"对候选进行预测失败: '{text[:50]}...'")
-                         # Fallback: 返回均匀分布概率
+                         logging.error(f"Prediction on candidates failed for: {text[:50]}...")
                          all_candidate_probs = np.array([np.ones(self.num_labels) / self.num_labels])
                     else:
-                         # 将所有批次的概率 Tensor 合并为一个大的 Numpy 数组 [num_candidates, num_labels]
                          all_candidate_probs = torch.cat(candidate_probs_list, dim=0).numpy()
 
-                # --- 5. 结果聚合 ---
-                # 调用您实现的 aggregate_results 函数进行聚合
-                # 传入所有候选的概率分布和配置的聚合策略
+                # 5. 结果聚合 (确保 aggregate_results 已正确导入)
                 aggregated_prob = aggregate_results(all_candidate_probs, strategy=self.args.ahp_aggregation_strategy)
-                final_aggregated_probs.append(aggregated_prob) # 将聚合结果添加到最终列表中
-                logging.debug(f"聚合后概率: {aggregated_prob}")
+                final_aggregated_probs.append(aggregated_prob)
+                logging.debug(f"Aggregated Prob: {aggregated_prob}")
 
             except Exception as e:
-                # 捕获在处理单个文本时可能发生的任何错误
-                logging.error(f"处理文本 '{text[:50]}...' 时 AHP 防御出错: {e}", exc_info=True) # exc_info=True 会记录详细的错误堆栈
-                # Fallback: 为出错的样本返回均匀分布概率
+                logging.error(f"处理文本 '{text[:50]}...' 时 AHP 防御出错: {e}", exc_info=True)
                 uniform_prob = np.ones(self.num_labels) / self.num_labels
                 final_aggregated_probs.append(uniform_prob)
 
-            # --- 可选：显存清理 ---
-            # 如果在处理大量文本时遇到显存不足 (OOM) 问题，可以尝试定期清理缓存
-            if i % 10 == 0: # 例如每处理 10 个文本清理一次
+            # --- 显存清理 (使用 text_idx) ---
+            if text_idx % 10 == 0 and text_idx > 0: 
                 if torch.cuda.is_available():
-                    torch.cuda.empty_cache() # 清理未被引用的 CUDA 缓存
-                    gc.collect() # 执行 Python 的垃圾回收
+                    logging.debug(f"AHP: 清理显存 (样本 {text_idx})")
+                    torch.cuda.empty_cache()
+                    gc.collect()
 
         logging.info("AHP 防御应用完成。")
         return final_aggregated_probs
@@ -490,15 +428,30 @@ class AlpacaModel:
         if denoiser_type == 'alpaca':
             # 使用 Alpaca 进行去噪
             logging.debug(f"使用 Alpaca 去噪 {len(masked_texts)} 个文本...")
-            # 准备去噪指令，将遮蔽标记填入模板
-            # 注意：这里的模板需要三个 {} 占位符，前两个用于指令中的示例，最后一个用于实际输入
-            denoise_instruction = self.denoise_instruction_template.format(
-                self.args.mask_token, self.args.mask_token, '{}'
-            )
-            # 构建 Prompt：将被遮蔽的文本填入去噪指令的最后一个占位符
-            # 使用无输入的模板格式化，因为输入文本已整合到指令中
-            prompts = [self._format_prompt(denoise_instruction.format(mt), "") for mt in masked_texts]
 
+           # --- 修改开始 ---
+            # 准备去噪指令模板
+            # 1. 获取原始模板
+            template = self.denoise_instruction_template
+            # 2. 找到最后一个 {} 的位置
+            last_placeholder_idx = template.rfind('{}')
+            if last_placeholder_idx == -1:
+                logging.error("去噪指令模板中未找到用于填充输入文本的 '{}' 占位符！")
+                # 可以选择抛出错误或返回空列表
+                return ["Error: Invalid denoise template"] * len(masked_texts)
+
+            # 3. 将最后一个 {} 之前的 {} 都替换为 mask_token
+            #    为了避免替换最后一个，我们先将其临时替换为一个特殊标记
+            temp_marker = "__TEMP_INPUT_PLACEHOLDER__"
+            template_with_marker = template[:last_placeholder_idx] + temp_marker + template[last_placeholder_idx+2:]
+            #    现在可以安全地用 mask_token 替换剩余的 {}
+            instruction_base = template_with_marker.replace('{}', self.args.mask_token)
+            #    最后，将特殊标记替换回 {}，准备用于填充 masked_text
+            final_instruction_template = instruction_base.replace(temp_marker, '{}')
+            # --- 修改结束 ---
+
+            # 使用最终的模板为每个 masked_text 构建 Prompt
+            prompts = [self._format_prompt(final_instruction_template.format(mt), "") for mt in masked_texts]
             # 分批生成去噪后的文本
             for i in tqdm(range(0, len(prompts), self.args.model_batch_size), desc="去噪 (Alpaca)", leave=False, ncols=100):
                  batch_prompts = prompts[i:i + self.args.model_batch_size]
@@ -587,7 +540,7 @@ class AlpacaModel:
                   raise RuntimeError("随机遮蔽器未能初始化，无法执行 SelfDenoise 防御。")
 
         # --- 逐个处理输入文本 ---
-        for text in tqdm(texts, desc="SelfDenoise 防御流程", leave=False, ncols=100):
+        for text_idx, text in enumerate(tqdm(texts, desc="SelfDenoise 防御流程", leave=False, ncols=100)):
             try:
                 # --- 1. 生成多个随机遮蔽版本 ---
                 # 调用随机遮蔽器的 mask_input_multiple 方法
@@ -637,7 +590,7 @@ class AlpacaModel:
                 aggregated_probs_list.append(uniform_prob)
 
             # --- 可选：显存清理 ---
-            if i % 10 == 0:
+            if text_idx % 10 == 0 and text_idx > 0:
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                     gc.collect()

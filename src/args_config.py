@@ -17,7 +17,7 @@ class AHPSettings:
         # === Model ===
         self.parser.add_argument('--model_path', type=str, default='/root/autodl-tmp/circulus_alpaca-7b',
                                  help="Path to the pre-trained Alpaca model.")
-        self.parser.add_argument('--cache_dir', type=str, default='./cache_path',
+        self.parser.add_argument('--cache_dir', type=str, default='/root/autodl-tmp/cache_path',
                                  help="Directory for caching models and datasets.")
         self.parser.add_argument('--model_batch_size', type=int, default=4,
                                  help="Batch size for model inference.")
@@ -60,7 +60,7 @@ class AHPSettings:
                                  help="Model to use for denoising in SelfDenoise.")
 
         # === Attack ===
-        self.parser.add_argument('--attack_method', type=str, default='textbugger', choices=['textbugger', 'textfooler', 'pwws', 'bae', 'deepwordbug'],
+        self.parser.add_argument('--attack_method', type=str, default='textbugger', choices=['textbugger', 'textfooler', 'pwws', 'bae', 'deepwordbug', 'bertattack'],
                                  help="TextAttack recipe to use.")
         self.parser.add_argument('--attack_query_budget', type=int, default=100,
                                  help="Maximum number of model queries allowed per attack.")

@@ -1,0 +1,13 @@
+{
+  "shell_port": 40463,
+  "iopub_port": 34611,
+  "stdin_port": 50669,
+  "control_port": 55263,
+  "hb_port": 45417,
+  "ip": "127.0.0.1",
+  "key": "11d5a278-e4b2b9e45a780f4b592d68a9",
+  "transport": "tcp",
+  "signature_scheme": "hmac-sha256",
+  "kernel_name": "ahp_env",
+  "jupyter_session": "/root/notebooks/Jailbreak_Attack.ipynb"
+}

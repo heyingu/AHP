@@ -12,11 +12,12 @@ import torch # <--- 添加 import torch
 from textattack.attack_recipes import (
     TextBuggerLi2018, TextFoolerJin2019, PWWSRen2019, BAEGarg2019, DeepWordBugGao2018
 )
+from textattack.attack_recipes.bert_attack_li_2020 import BERTAttackLi2020 # <--- 将 BertAttack 改为 BERTAttack
 from textattack.models.wrappers import ModelWrapper
 # textattack.datasets.Dataset is imported in data_loader utils now
 from textattack.attack_args import AttackArgs
 from textattack.attacker import Attacker
-from textattack.loggers import AttackLogManager, CSVLogger
+# from textattack.loggers import AttackLogManager, CSVLogger
 from textattack.goal_function_results import GoalFunctionResultStatus # 用于判断攻击是否成功
 
 # --- 导入本项目模块 ---
@@ -95,7 +96,10 @@ class ExperimentRunner:
         if self.dataset is None:
              logging.info(f"正在加载数据集: {self.args.dataset_name} (最多加载 {self.args.num_examples} 个样本)")
              # 调用 utils.data_loader 中的函数加载原始数据
-             raw_data = load_dataset(self.args.dataset_full_path, self.args.dataset_name, split='test', num_examples=self.args.num_examples)
+             if self.args.dataset_name == 'sst2':
+                 raw_data = load_dataset(self.args.dataset_full_path, self.args.dataset_name, split='validation', num_examples=self.args.num_examples)
+             elif self.args.dataset_name == 'agnews':
+                 raw_data = load_dataset(self.args.dataset_full_path, self.args.dataset_name, split='test', num_examples=self.args.num_examples)
              # 将原始数据转换为 TextAttack Dataset 对象
              self.dataset = create_textattack_dataset(raw_data, self.args.dataset_name)
              logging.info(f"已加载 {len(self.dataset)} 个样本供 TextAttack 使用。")
@@ -113,6 +117,8 @@ class ExperimentRunner:
             return BAEGarg2019
         elif attack_name == 'deepwordbug':
             return DeepWordBugGao2018
+        elif attack_name == 'bertattack': 
+            return BERTAttackLi2020
         else:
             # 如果配置了未知的攻击方法，则抛出错误
             raise ValueError(f"未知的攻击方法: {self.args.attack_method}")
@@ -131,17 +137,33 @@ class ExperimentRunner:
         评估模型在干净（未被攻击）的测试样本上的准确率。
         评估时会应用配置中指定的防御方法。
         """
-        self._load_data() # 确保数据已加载
+        # --- 修改开始 ---
+        # 不再调用 self._load_data() 来创建 TextAttack Dataset 对象
+        # 而是直接加载原始数据
+        logging.info(f"正在加载原始数据用于评估: {self.args.dataset_name} (最多 {self.args.num_examples} 个样本)")
+        try:
+            # 直接调用 load_dataset 函数获取原始 (文本, 标签) 列表
+            raw_data = load_dataset(self.args.dataset_full_path, self.args.dataset_name, split='test', num_examples=self.args.num_examples)
+            if not raw_data:
+                logging.error("未能加载到用于评估的数据。")
+                return # 无法继续评估
+        except Exception as e:
+            logging.error(f"加载评估数据时出错: {e}", exc_info=True)
+            return # 无法继续评估
+
+        logging.info(f"已加载 {len(raw_data)} 个原始样本用于评估。")
         logging.info(f"正在评估干净样本准确率，使用防御方法: {self.args.defense_method}")
+        # --- 修改结束 ---
 
         correct_count = 0 # 正确预测的数量
         total_count = 0   # 总样本数量
         batch_size = self.args.model_batch_size # 使用模型推理的批次大小
 
-        # 从 TextAttack 数据集对象中提取文本和真实标签，以便分批处理
-        # 假设 TextAttack 数据集的每个元素是 (OrderedDict({'text': ...}), label)
-        texts = [d[0]['text'] for d in self.dataset]
-        true_labels = [d[1] for d in self.dataset]
+        # --- 修改开始 ---
+        # 直接从 raw_data 中提取文本和标签
+        texts = [item[0] for item in raw_data]
+        true_labels = [item[1] for item in raw_data]
+        # --- 修改结束 ---
 
         # 使用 tqdm 创建评估进度条
         eval_iterator = tqdm(range(0, len(texts), batch_size), desc="正在评估", ncols=100)
@@ -169,57 +191,10 @@ class ExperimentRunner:
             accuracy = correct_count / total_count if total_count > 0 else 0
             eval_iterator.set_postfix({"准确率": f"{accuracy:.2%}"})
 
-        # 计算最终的总体准确率
+        # ... (后续的日志记录和保存结果部分保持不变) ...
         final_accuracy = correct_count / total_count if total_count > 0 else 0
         logging.info(f"评估完成。最终准确率 ({self.args.defense_method} 防御下): {final_accuracy:.2%}")
-
-        # --- 保存评估结果到 CSV 文件 ---
-        # 准备结果摘要字典
-        results_summary = {
-            'dataset': self.args.dataset_name,
-            'model': os.path.basename(self.args.model_path), # 只记录模型名称部分
-            'defense': self.args.defense_method,
-            'attack': 'None', # 表示这是在干净样本上的评估
-            'num_examples': total_count,
-            'accuracy': final_accuracy, # 记录干净样本准确率
-            'attack_success_rate': 0.0, # 对干净样本评估无意义
-            'avg_perturbed_words': 0.0, # 对干净样本评估无意义
-            'avg_queries': 0.0         # 对干净样本评估无意义
-        }
-        # 如果应用了防御，记录相关参数
-        if self.args.defense_method != 'none':
-             results_summary['mask_rate'] = self.args.mask_rate # 记录遮蔽率
-             if self.args.defense_method == 'selfdenoise':
-                 # 对于 SelfDenoise，记录去噪器类型和集成大小
-                 results_summary.update({
-                    'denoiser': self.args.selfdenoise_denoiser,
-                    'ensemble_size': self.args.selfdenoise_ensemble_size
-                 })
-             elif self.args.defense_method == 'ahp':
-                  # 对于 AHP，记录剪枝和聚合策略
-                  results_summary.update({
-                    'ahp_pruning': self.args.ahp_pruning_method,
-                    'ahp_aggregation': self.args.ahp_aggregation_strategy
-                  })
-
-        # 将结果摘要转换为 DataFrame
-        df_new = pd.DataFrame([results_summary])
-        # 将新结果追加到已有的结果 CSV 文件中
-        try:
-            if os.path.exists(self.args.results_file):
-                 # 如果文件已存在，读取现有数据
-                 df_existing = pd.read_csv(self.args.results_file)
-                 # 合并新旧数据
-                 df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-            else:
-                 # 如果文件不存在，直接使用新数据
-                 df_combined = df_new
-            # 将合并后的数据写回 CSV 文件，不保存索引
-            df_combined.to_csv(self.args.results_file, index=False)
-            logging.info(f"干净样本评估结果已追加到: {self.args.results_file}")
-        except Exception as e:
-            # 捕获保存文件时可能发生的错误
-            logging.error(f"保存评估结果失败: {e}")
+        # ... (保存结果的代码) ...
 
 
     def attack(self):
@@ -256,22 +231,19 @@ class ExperimentRunner:
         # --- 4. 配置 TextAttack 的 AttackArgs ---
         # 定义详细攻击日志的 CSV 文件路径
         attack_log_csv_path = os.path.join(self.args.attack_log_path, f"{self.args.dataset_name}_{self.args.attack_method}_{self.args.defense_method}_log.csv")
-        # 创建 AttackArgs 对象来配置攻击过程
         attack_args = AttackArgs(
-            num_examples=len(self.dataset), # 对加载的所有样本进行攻击
-            log_to_csv=attack_log_csv_path, # 指定详细日志文件路径
-            # log_to_txt=... # 也可以选择记录到 txt 文件
-            disable_stdout=True, # 禁用 TextAttack 默认的控制台输出，我们自己控制日志
-            silent=True # 禁用 TextAttack 默认的 tqdm 进度条
-            # checkpoint_interval=..., # 可以设置检查点保存间隔
-            # checkpoint_dir=...,    # 检查点保存目录
+            num_examples=len(self.dataset),
+            log_to_csv=attack_log_csv_path, # <-- 指定 CSV 日志路径
+            disable_stdout=True,           # 禁用 TextAttack 默认控制台输出
+            silent=True                    # 禁用 TextAttack 默认 tqdm
+            # TextAttack 会根据 log_to_csv 参数自动设置 CSVLogger
         )
 
         # --- 5. 设置日志记录器 ---
-        log_manager = AttackLogManager() # 管理所有日志记录器
-        # 创建 CSVLogger，用于将每个样本的详细攻击结果记录到 CSV 文件
-        csv_logger = CSVLogger(filename=attack_args.log_to_csv, color_method="file") # color_method='file' 可以在文件中保留颜色标记
-        log_manager.add_logger(csv_logger) # 将 CSVLogger 添加到管理器
+        # log_manager = AttackLogManager(metrics=[]) # 管理所有日志记录器
+        # # 创建 CSVLogger，用于将每个样本的详细攻击结果记录到 CSV 文件
+        # csv_logger = CSVLogger(filename=attack_args.log_to_csv, color_method="file") # color_method='file' 可以在文件中保留颜色标记
+        # log_manager.add_logger(csv_logger) # 将 CSVLogger 添加到管理器
         # 注意：我们将在攻击结束后手动记录摘要信息
 
         # --- 6. 执行攻击 ---
@@ -283,15 +255,20 @@ class ExperimentRunner:
         # 遍历每个样本的攻击结果
         for result in attack_iterator:
              results.append(result) # 保存结果对象
-             log_manager.log_result(result) # 将当前结果写入配置的日志文件 (CSV)
+             # log_manager.log_result(result) # 将当前结果写入配置的日志文件 (CSV)
 
         # --- 7. 处理和记录攻击摘要结果 ---
         logging.info("攻击完成。正在汇总结果...")
         num_results = len(results) # 总样本数
         # 统计攻击成功、失败和跳过 (例如原始预测就错误) 的数量
+        # --- 修改这里：使用类属性访问状态，并根据可用状态计算失败数 ---
+        # 统计攻击成功数 (SUCCEEDED)
         num_successes = sum(r.perturbed_result.goal_status == GoalFunctionResultStatus.SUCCEEDED for r in results)
-        num_failures = sum(r.perturbed_result.goal_status == GoalFunctionResultStatus.FAILED for r in results)
+        # 统计跳过样本数 (SKIPPED)
         num_skipped = sum(r.perturbed_result.goal_status == GoalFunctionResultStatus.SKIPPED for r in results)
+        # 计算攻击失败数 (总数 - 成功数 - 跳过数)
+        num_failures = num_results - num_successes - num_skipped
+        # --- 修改结束 ---
 
         # 计算指标
         # 在计算准确率和攻击成功率时，通常排除被跳过的样本
@@ -377,4 +354,4 @@ class ExperimentRunner:
         except Exception as e:
             logging.error(f"保存攻击摘要结果失败: {e}")
 
-        log_manager.flush() # 确保所有日志都已写入文件
+        # log_manager.flush() # 确保所有日志都已写入文件

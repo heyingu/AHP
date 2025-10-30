@@ -260,3 +260,42 @@ git commit -m "four"
 cd /root/autodl=tmp
 cd /root/autodl-tmp
 zip -r circulus_alpaca-7b.zip circulus_alpaca-7b/
+source ahp_env/bin/activate
+pip install tiktoken+
+pip install tiktoken
+ls -lh /root/autodl-tmp/alpaca-native/tokenizer.model
+sudo apt update
+sudo apt install git-lfs
+git lfs install
+cd /root/autodl-tmp/alpaca-native
+git lfs pull
+ls -lh /root/autodl-tmp/circulus_alpaca-7b/tokenizer.model
+cd ~
+cd ~ls -lh /root/autodl-tmp/circulus_alpaca-7b/tokenizer.model
+ls -lh /root/autodl-tmp/circulus_alpaca-7b/tokenizer.model
+cd /root/autodl-tmp/alpaca-native
+cd ~
+ls -lh /root/autodl-tmp/alpaca-native/tokenizer.model
+pip install huggingface_hub
+huggingface-cli download alpaca-native tokenizer.model \
+huggingface-cli download chavinlo/alpaca-native tokenizer.model \
+~/.bashrc
+export HF_ENDPOINT=https://hf-mirror.com
+huggingface-cli download --resume-download chavinlo/alpaca-native --local-dir /root/autodl-tmp/alpaca-native 
+ls -lh /root/autodl-tmp/circulus_alpaca-7b/tokenizer.model
+ls -lh /root/autodl-tmp/alpaca-native/tokenizer.model
+huggingface-cli download --repo-type dataset --resume-download fancyzhx/ag_news --local-dir dataset
+source ahp_env/bin/activate
+wget https://hf-mirror.com/hfd/hfd.shchmod a+x hfd.sh
+export HF_ENDPOINT=https://hf-mirror.com
+wget https://hf-mirror.com/hfd/hfd.shchmod a+x hfd.sh
+./hfd.sh fancyzhx/ag_news dataset
+wget https://hf-mirror.com/hfd/hfd.sh
+chmod a+x hfd.sh
+./hfd.sh fancyzhx/ag_news dataset
+hfd fancyzhx/ag_news dataset
+./hfd.sh fancyzhx/ag_news dataset
+hfd fancyzhx/ag_news --dataset
+./hfd.sh fancyzhx/ag_news --dataset
+pip install aria2c
+huggingface-cli download --repo-type dataset --resume-download fancyzhx/ag_news --local-dir dataset
