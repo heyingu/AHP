@@ -299,3 +299,9 @@ hfd fancyzhx/ag_news --dataset
 ./hfd.sh fancyzhx/ag_news --dataset
 pip install aria2c
 huggingface-cli download --repo-type dataset --resume-download fancyzhx/ag_news --local-dir dataset
+source ahp_env/bin/activate
+export HF_ENDPOINT=https://hf-mirror.com
+huggingface-cli download --resume-download cross-encoder/nli-roberta-base --local-dir autodl-tmp
+source ahp_env/bin/activate
+export HF_ENDPOINT=https://hf-mirror.com
+huggingface-cli download --resume-download cross-encoder/nli-roberta-base --local-dir autodl-tmp/cache/huggingface/hub/models--cross-encoder--nli-roberta-base

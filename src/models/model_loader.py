@@ -50,9 +50,20 @@ ALPACA_TEMPLATE_NO_INPUT = """Below is an instruction that describes a task. Wri
 # 这些指令用于分类任务和 SelfDenoise 的去噪任务
 DATASET_INSTRUCTIONS = {
     "sst2": {
-        "classification": "请判断输入英文句子的情感是积极的还是消极的。(Given an English sentence input, determine its sentiment as positive or negative.)", # 分类指令
-        # 去噪指令，包含示例 (few-shot prompting)
-        "denoise_explicit": """请将输入句子中每个遮蔽词 {} 替换为合适的词语。输出的句子应自然、连贯，且长度与输入句子相同。请直接给出答案。
+        # SST-2 的指令 (保持不变, 它工作正常)
+       # "classification": """Given an English sentence input, determine its sentiment. Respond with "positive" or "negative" only.
+"classification": """"Given an English sentence input, determine its sentiment as positive or negative. Respond with positive or negative only.",
+### Input:
+A stirring , funny and finally transporting re-imagining of beauty and the beast and 1930s horror films
+
+### Response:
+positive
+
+### Input:
+{}""",
+        
+        # --- 这是您不小心删除的、sst2 的去噪指令 (Few-Shot) ---
+        "denoise_explicit": """Fill in the masked word {} with a suitable word. The output sentence must be natural, coherent, and the same length as the input. Respond with the completed sentence directly.
 
 ### Input:
 a {} , funny and {} transporting re-imagining {} {} and the beast and 1930s {} films
@@ -62,34 +73,41 @@ a stirring , funny and finally transporting re-imagining of beauty and the beast
 
 ### Input:
 {}""",
-        "label_map": {"negative": 0, "positive": 1}, # 标签名称到 ID 的映射
-        # Alpaca-7B 对于 'Negative' 和 'Positive' 的 token ID (需要根据实际模型验证)
-        "label_tokens": [29940, 9135] # 例如：' Negative' ' Positive' 的 ID
+        
+        "label_map": {"negative": 0, "positive": 1}, 
+        "label_tokens": [29940, 9135] # ' Negative', ' Positive'
     },
     "agnews": {
-        # AG News 的分类指令，包含示例 (few-shot prompting)
-        "classification": """请根据新闻文章的标题和描述，将其分类到以下四个类别之一：世界 (World)、体育 (Sports)、商业 (Business) 或 科技 (Science/Technology)。请直接返回类别名称作为答案。
+        # AG News 分类指令 (保持不变)
+#         "classification": """Classify the news article based on its title and description into one of the four categories: World, Sports, Business, or Science/Technology. Respond with the category name only.
 
-### Input:
-Title: Wall St. Bears Claw Back Into the Black (Reuters)
-Description: Reuters - Short-sellers, Wall Street's dwindling band of ultra-cynics, are seeing green again.
+# ### Input:
+# Title: Wall St. Bears Claw Back Into the Black (Reuters)
+# Description: Reuters - Short-sellers, Wall Street's dwindling band of ultra-cynics, are seeing green again.
 
-### Response:
-Business
+# ### Response:
+# Business
 
-### Input:
-{}""", # 真实输入的占位符
-        # AG News 的去噪指令
-       "denoise_explicit": """请将输入句子中每个被遮蔽的位置 \"{}\" 替换为合适的词语，使其自然且连贯。每个 \"{}\" 只能替换为一个词。返回的句子应与给定句子的长度相同。请直接给出答案。
+# ### Input:
+# {}""",
+        "classification": """Classify the news article based on its title and description into one of the four categories: World, Sports, Business, or Science/Technology. Respond with the category name only.
 
 ### Input:
 {}""",
-        "label_map": {"World": 0, "Sports": 1, "Business": 2, "Technology": 3}, # 标签名称到 ID 的映射
-        # Alpaca-7B 对于 'World', 'Sports', 'Business', 'Technology' 的 token ID (需要根据实际模型验证)
-        "label_tokens": [14058, 29903, 16890, 7141] # 示例 ID
+        
+        # --- 关键修改在这里 ---
+        # 移除了第一个句子中所有 '{}' 占位符，
+        # 这样 _denoise_texts 就不会错误地替换它们。
+       "denoise_explicit": """Please replace each masked position in the input sentence with a suitable word to make it natural and coherent. Each mask must be replaced by only one word. Return the completed sentence directly.
+
+### Input:
+{}""",
+        # --- 修改结束 ---
+
+        "label_map": {"World": 0, "Sports": 1, "Business": 2, "Technology": 3}, 
+        "label_tokens": [14058, 29903, 16890, 7141] # 'World', 'Sports', 'Business', 'Technology'
     }
 }
-
 
 class AlpacaModel:
     def __init__(self, args: AHPSettings):
@@ -122,10 +140,16 @@ class AlpacaModel:
              except Exception as e:
                  logging.error(f"初始化 AdversarialMasker 时出错: {e}", exc_info=True)
                  raise e
-
-        if self.args.defense_method == 'selfdenoise' and self.random_masker is None:
+        if (self.args.defense_method == 'selfdenoise' or 
+            (self.args.defense_method == 'ahp' and self.args.ahp_masking_strategy == 'random')) and \
+           self.random_masker is None:
+            
             self.random_masker = RandomMasker(self.tokenizer, mask_token=self.args.mask_token, mask_rate=self.args.mask_rate)
-            logging.info("已初始化 SelfDenoise 所需的随机遮蔽器。")
+            logging.info("已初始化[随机]遮蔽器 (用于 SelfDenoise 或 AHP-Random)。")
+            
+        # if self.args.defense_method == 'selfdenoise' and self.random_masker is None:
+        #     self.random_masker = RandomMasker(self.tokenizer, mask_token=self.args.mask_token, mask_rate=self.args.mask_rate)
+        #     logging.info("已初始化 SelfDenoise 所需的随机遮蔽器。")
 
     def _load_model(self):
         """加载 Alpaca 模型和分词器到指定设备。"""
@@ -276,15 +300,19 @@ class AlpacaModel:
 
         # 调用模型的 generate 方法生成文本
         generate_ids = self.model.generate(
-            **inputs, # 将处理好的输入传递给模型
-            max_new_tokens=max_new_tokens, # 控制生成文本的最大长度
-            do_sample=False, # 使用贪婪解码 (Greedy Decoding)，保证结果一致性，除非需要探索性生成
-            pad_token_id=self.tokenizer.eos_token_id # 重要：指定 pad_token_id，防止生成意外停止
-            # 可以根据需要从 self.args 添加其他生成参数，例如：
-            # temperature=self.args.temperature,
-            # top_p=self.args.top_p,
-            # num_beams=self.args.num_beams,
-            # repetition_penalty=self.args.repetition_penalty,
+            **inputs, 
+            max_new_tokens=max_new_tokens, 
+            
+            # --- 修改开始 ---
+            do_sample=True,             # <--- 启用采样
+            temperature=0.7,            # <--- 增加一点随机性 (可调)
+            top_p=0.9,                  # <--- 使用 nucleus sampling
+            num_return_sequences=1,     # <--- 每次调用只返回一个序列
+            # --- 移除无效参数 ---
+            # (日志警告 'pad_token_id' 无效，我们移除它，
+            #  模型会默认使用 eos_token_id 作为停止符)
+            # pad_token_id=self.tokenizer.eos_token_id 
+            # --- 修改结束 ---
         )
 
         # 解码生成的部分
@@ -352,8 +380,23 @@ class AlpacaModel:
             try:
                 # 1. 对抗性遮蔽
                 # (现在会调用已完善的 _calculate_word_importance)
-                masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
-                logging.debug(f"AHP Masked Text: {masked_text}")
+                # masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
+                # logging.debug(f"AHP Masked Text: {masked_text}")
+                if self.args.ahp_masking_strategy == 'random':
+                    # 1. 随机遮蔽
+                    if self.random_masker is None: # 兜底检查
+                         raise RuntimeError("AHP-Random 模式需要 RandomMasker，但它未被初始化。")
+                    # 注意：RandomMasker.mask_input 使用在 __init__ 中设置的 mask_rate
+                    masked_text, masked_indices = self.random_masker.mask_input(text)
+                    logging.debug(f"AHP [Random] Masked Text: {masked_text}")
+
+                else: # 默认 'adversarial'
+                    # 1. 对抗性遮蔽
+                    if self.adversarial_masker is None: # 兜底检查
+                         raise RuntimeError("AHP-Adversarial 模式需要 AdversarialMasker，但它未被初始化。")
+                    # 注意：AdversarialMasker.mask_input 需要传入 mask_rate
+                    masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
+                    logging.debug(f"AHP [Adversarial] Masked Text: {masked_text}")
 
                 # 2. 候选生成
                 # (现在会调用已完善的 generate_candidates)
@@ -415,107 +458,80 @@ class AlpacaModel:
 
     def _denoise_texts(self, masked_texts: List[str], denoiser_type: str) -> List[str]:
         """
-        使用 Alpaca 或 RoBERTa 对一批被遮蔽的文本进行去噪（恢复）。
-
-        Args:
-            masked_texts (List[str]): 包含遮蔽标记的文本列表。
-            denoiser_type (str): 使用的去噪器类型 ('alpaca' 或 'roberta')。
-
-        Returns:
-            List[str]: 去噪（恢复）后的文本列表。
+        [已修改] 使用 Alpaca 或 RoBERTa 对一批被遮蔽的文本进行去噪（恢复）。
         """
         denoised_texts = []
         if denoiser_type == 'alpaca':
-            # 使用 Alpaca 进行去噪
+            # (Alpaca 部分保持不变 - 即使它不能用，我们先保留它)
             logging.debug(f"使用 Alpaca 去噪 {len(masked_texts)} 个文本...")
-
-           # --- 修改开始 ---
-            # 准备去噪指令模板
-            # 1. 获取原始模板
             template = self.denoise_instruction_template
-            # 2. 找到最后一个 {} 的位置
             last_placeholder_idx = template.rfind('{}')
             if last_placeholder_idx == -1:
                 logging.error("去噪指令模板中未找到用于填充输入文本的 '{}' 占位符！")
-                # 可以选择抛出错误或返回空列表
                 return ["Error: Invalid denoise template"] * len(masked_texts)
 
-            # 3. 将最后一个 {} 之前的 {} 都替换为 mask_token
-            #    为了避免替换最后一个，我们先将其临时替换为一个特殊标记
             temp_marker = "__TEMP_INPUT_PLACEHOLDER__"
             template_with_marker = template[:last_placeholder_idx] + temp_marker + template[last_placeholder_idx+2:]
-            #    现在可以安全地用 mask_token 替换剩余的 {}
             instruction_base = template_with_marker.replace('{}', self.args.mask_token)
-            #    最后，将特殊标记替换回 {}，准备用于填充 masked_text
             final_instruction_template = instruction_base.replace(temp_marker, '{}')
-            # --- 修改结束 ---
 
-            # 使用最终的模板为每个 masked_text 构建 Prompt
             prompts = [self._format_prompt(final_instruction_template.format(mt), "") for mt in masked_texts]
-            # 分批生成去噪后的文本
             for i in tqdm(range(0, len(prompts), self.args.model_batch_size), desc="去噪 (Alpaca)", leave=False, ncols=100):
                  batch_prompts = prompts[i:i + self.args.model_batch_size]
-                 # 去噪时允许生成更长的文本，以防原始文本较长或模型添加额外内容
-                 gen_max_tokens = int(self.args.max_seq_length * 1.5) # 设定一个合理的上限
+                 gen_max_tokens = int(self.args.max_seq_length * 1.5) 
                  responses = self._generate_batch(batch_prompts, max_new_tokens=gen_max_tokens)
                  denoised_texts.extend(responses)
 
         elif denoiser_type == 'roberta':
-            # 使用 RoBERTa 进行去噪
-            logging.debug(f"使用 RoBERTa 去噪 {len(masked_texts)} 个文本...")
-            self._load_roberta_denoiser() # 确保 RoBERTa 模型已加载
+            # --- 关键修改：使 RoBERTa 能够采样 ---
+            logging.debug(f"使用 RoBERTa 去噪 {len(masked_texts)} 个文本 (带采样)...")
+            self._load_roberta_denoiser() 
 
-            # 获取 RoBERTa 分词器使用的标准遮蔽标记 ID
             roberta_mask_token_id = self.roberta_tokenizer.mask_token_id
-            # 获取我们自定义的遮蔽标记在 RoBERTa 分词器中的 ID (如果已添加)
-            custom_mask_token_id = self.roberta_tokenizer.convert_tokens_to_ids(self.args.mask_token)
+            
+            # (确保使用 <unk> 或其他 mask_token 都能正确替换)
+            roberta_input_texts = [t.replace(self.args.mask_token, self.roberta_tokenizer.mask_token) for t in masked_texts]
 
-            outputs = [] # 存储去噪后的文本
-            # 分批处理
-            for i in tqdm(range(0, len(masked_texts), self.args.model_batch_size), desc="去噪 (RoBERTa)", leave=False, ncols=100):
-                batch_texts = masked_texts[i:i+self.args.model_batch_size]
+            outputs = [] 
+            for i in tqdm(range(0, len(roberta_input_texts), self.args.model_batch_size), desc="去噪 (RoBERTa)", leave=False, ncols=100):
+                batch_texts = roberta_input_texts[i:i+self.args.model_batch_size]
 
-                # --- 输入处理 ---
-                # 为了让 RoBERTa 更好地理解遮蔽位置，通常需要将输入文本中的自定义 mask_token
-                # 替换为 RoBERTa 自身训练时使用的 mask_token (例如 '<mask>')。
-                # 当然，如果 RoBERTa 被微调过以识别我们的自定义 mask_token，则可能不需要替换。
-                # 为了通用性，这里进行替换：
-                roberta_input_texts = [t.replace(self.args.mask_token, self.roberta_tokenizer.mask_token) for t in batch_texts]
+                inputs = self.roberta_tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True, max_length=self.args.max_seq_length)
+                inputs = {k: v.to(self.device) for k, v in inputs.items()} 
 
-                # 使用 RoBERTa 分词器处理输入
-                inputs = self.roberta_tokenizer(roberta_input_texts, return_tensors="pt", padding=True, truncation=True, max_length=self.args.max_seq_length)
-                inputs = {k: v.to(self.device) for k, v in inputs.items()} # 移动到设备
+                with torch.no_grad(): 
+                    logits = self.roberta_model(**inputs).logits 
 
-                # --- 模型预测 ---
-                with torch.no_grad(): # 去噪不需要梯度
-                    logits = self.roberta_model(**inputs).logits # 获取所有位置的 logits
-
-                # --- 填充遮蔽位置 ---
-                # 找到输入中 RoBERTa 遮蔽标记 '<mask>' 的位置
                 mask_token_indices = (inputs['input_ids'] == roberta_mask_token_id)
-                # 复制原始输入 ID，我们只修改被遮蔽的部分
                 predicted_token_ids = inputs['input_ids'].clone()
 
-                # 如果存在遮蔽标记
                 if torch.any(mask_token_indices):
-                     # 在这些遮蔽位置上，用模型预测的最可能的 token ID 替换掉 '<mask>' ID
-                     predicted_token_ids[mask_token_indices] = logits[mask_token_indices].argmax(axis=-1)
+                    # --- 修改开始 ---
+                    # 不要使用 argmax (确定性)，我们要采样
+                    # 1. 获取遮蔽位置的 logits
+                    masked_logits = logits[mask_token_indices] # [num_masks_in_batch, vocab_size]
+                    
+                    # 2. 对 logits 应用 softmax 得到概率
+                    masked_probs = torch.softmax(masked_logits, dim=-1)
+                    
+                    # 3. 从概率分布中采样 1 个 token
+                    # (torch.multinomial 需要 1D 或 2D tensor, masked_probs 是 2D, 所以 OK)
+                    # num_samples=1
+                    sampled_token_ids = torch.multinomial(masked_probs, num_samples=1).squeeze(-1) # [num_masks_in_batch]
+                    
+                    # 4. 用采样到的 token ID 替换 '<mask>' ID
+                    predicted_token_ids[mask_token_indices] = sampled_token_ids
+                    # --- 修改结束 ---
 
-                # --- 解码 ---
-                # 将填充后的 token ID 序列解码回文本
                 batch_outputs = self.roberta_tokenizer.batch_decode(predicted_token_ids, skip_special_tokens=True)
                 outputs.extend(batch_outputs)
             denoised_texts = outputs
-
+            # --- 关键修改结束 ---
+            
         else:
-             # 配置了未知的去噪器类型
              raise ValueError(f"未知的去噪器类型: {denoiser_type}")
 
-        # --- 后处理 ---
-        # 对去噪后的文本进行清理，例如去除首尾多余空格
-        # skip_special_tokens=True 已经处理了大部分特殊标记
         cleaned_texts = [t.strip() for t in denoised_texts]
-        # 打印一个去噪示例，方便调试检查
         logging.debug(f"去噪后示例文本 (前 50 字符): {cleaned_texts[0][:50] if cleaned_texts else '无'}")
         return cleaned_texts
 

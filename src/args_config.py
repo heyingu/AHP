@@ -36,7 +36,7 @@ class AHPSettings:
         # === Defense ===
         self.parser.add_argument('--defense_method', type=str, default='none', choices=['none', 'ahp', 'selfdenoise'],
                                  help="Defense method to apply: 'none', 'ahp', or 'selfdenoise'.")
-        self.parser.add_argument('--mask_token', type=str, default='<MASK>',
+        self.parser.add_argument('--mask_token', type=str, default='<unk>',
                                  help="Token used for masking.")
         self.parser.add_argument('--mask_rate', type=float, default=0.15,
                                  help="Masking rate for AHP and SelfDenoise.")
@@ -50,7 +50,9 @@ class AHPSettings:
                                  help="Threshold for pruning (meaning depends on method).")
         self.parser.add_argument('--ahp_aggregation_strategy', type=str, default='majority_vote', choices=['majority_vote', 'weighted_vote'],
                                  help="Aggregation strategy for AHP.")
-
+        self.parser.add_argument('--ahp_masking_strategy', type=str, default='adversarial', choices=['adversarial', 'random'],
+                                 help="AHP 内部使用的遮蔽策略：'adversarial' (梯度) 或 'random' (随机)。")
+        
         # --- SelfDenoise Specific ---
         self.parser.add_argument('--selfdenoise_ensemble_size', type=int, default=50,
                                  help="Number of masked samples for SelfDenoise prediction ensemble.")

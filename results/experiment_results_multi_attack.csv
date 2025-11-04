@@ -1,4 +1,8 @@
 dataset,model,defense,attack,num_examples,accuracy,attack_success_rate,avg_perturbed_words,avg_queries,query_budget,mask_rate,ahp_pruning,ahp_aggregation
-agnews,alpaca-native,none,deepwordbug,20,1.0,0.0,0,142.83333333333334,200,,,
-agnews,alpaca-native,none,pwws,20,1.0,0.0,0,200.0,200,,,
-agnews,alpaca-native,ahp,pwws,20,1.0,0.0,0,200.0,200,0.15,perplexity,majority_vote
+agnews,alpaca-native,none,deepwordbug,100,0.125,0.875,2.0,61.5,200,,,
+sst2,alpaca-native,none,deepwordbug,100,0.6097560975609756,0.3902439024390244,1.25,42.1219512195122,200,,,
+sst2,alpaca-native,ahp,deepwordbug,100,0.75,0.25,1.0,45.97222222222222,200,0.15,semantic,majority_vote
+agnews,alpaca-native,ahp,deepwordbug,100,0.2,0.8,1.0,76.44,200,0.15,semantic,majority_vote
+agnews,alpaca-native,ahp,deepwordbug,100,0.28,0.72,1.0,77.8,200,0.15,none,majority_vote
+sst2,alpaca-native,ahp,deepwordbug,100,0.8108108108108109,0.1891891891891892,1.0,47.24324324324324,200,0.15,none,majority_vote
+sst2,alpaca-native,ahp,deepwordbug,100,0.8108108108108109,0.1891891891891892,1.0,47.24324324324324,200,0.15,none,majority_vote
