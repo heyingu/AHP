@@ -1,6 +1,9 @@
 # src/experiment_runner.py
 import logging
 import os
+
+
+
 import pandas as pd
 import numpy as np
 from tqdm.auto import tqdm
@@ -10,7 +13,7 @@ import torch # <--- 添加 import torch
 
 # --- 导入 TextAttack 相关组件 ---
 from textattack.attack_recipes import (
-    TextBuggerLi2018, TextFoolerJin2019, PWWSRen2019, BAEGarg2019, DeepWordBugGao2018
+    TextBuggerLi2018, TextFoolerJin2019, PWWSRen2019, BAEGarg2019, DeepWordBugGao2018,Pruthi2019
 )
 from textattack.attack_recipes.bert_attack_li_2020 import BERTAttackLi2020 # <--- 将 BertAttack 改为 BERTAttack
 from textattack.models.wrappers import ModelWrapper
@@ -19,6 +22,16 @@ from textattack.attack_args import AttackArgs
 from textattack.attacker import Attacker
 # from textattack.loggers import AttackLogManager, CSVLogger
 from textattack.goal_function_results import GoalFunctionResultStatus # 用于判断攻击是否成功
+
+from textattack.constraints.pre_transformation import (
+    RepeatModification,
+    StopwordModification,
+)
+# --- 关键修复 (适用于 textattack==0.3.8) ---
+from textattack.constraints.semantics.sentence_encoders.infer_sent import InferSent # (PyTorch-based)
+from textattack.constraints.semantics.sentence_encoders.universal_sentence_encoder import UniversalSentenceEncoder # (TensorFlow-based)
+# --- 修复结束 ---
+
 
 # --- 导入本项目模块 ---
 try:
@@ -85,6 +98,7 @@ class ExperimentRunner:
         Args:
             args (AHPSettings): 包含所有实验配置的参数对象。
         """
+
         self.args = args
         # 初始化 Alpaca 模型，模型内部会根据 args.defense_method 处理防御逻辑
         self.alpaca_model = AlpacaModel(args)
@@ -119,6 +133,8 @@ class ExperimentRunner:
             return DeepWordBugGao2018
         elif attack_name == 'bertattack': 
             return BERTAttackLi2020
+        elif attack_name == 'pruthi': # <--- 添加此行
+            return Pruthi2019
         else:
             # 如果配置了未知的攻击方法，则抛出错误
             raise ValueError(f"未知的攻击方法: {self.args.attack_method}")
@@ -211,6 +227,44 @@ class ExperimentRunner:
         attack_recipe_class = self._get_attack_recipe()
         # 使用配方类的 .build() 方法构建攻击实例，传入包装后的模型
         attack = attack_recipe_class.build(model_wrapper)
+
+        # problem_attacks = ['textbugger', 'textfooler', 'pwws']
+        # if self.args.attack_method in problem_attacks:
+        #     logging.info(f"正在为 {self.args.attack_method} 扫描并替换 TensorFlow 约束 (USE -> InferSent)...")
+        #     new_constraints = []
+        #     use_found = False
+            
+        #     # 遍历所有默认约束
+        #     for constraint in attack.constraints:
+        #         # 检查这个约束是不是基于 TensorFlow 的 USE
+        #         if isinstance(constraint, UniversalSentenceEncoder):
+        #             use_found = True
+        #             # 如果是，我们跳过它，不把它加到新列表中
+        #             continue
+        #         # 保留所有其他约束
+        #         new_constraints.append(constraint)
+
+        #     # 如果我们成功找到了 USE 约束
+        #     if use_found:
+        #         # 根据攻击类型设置不同的阈值（与 TextAttack 默认值保持一致）
+        #         if self.args.attack_method == 'textfooler':
+        #             threshold = 0.84
+        #         elif self.args.attack_method == 'pwws':
+        #             threshold = 0.9
+        #         else: # textbugger
+        #             threshold = 0.8
+                
+        #         # 添加 PyTorch 版本的约束 (InferSent for textattack 0.3.8)
+        #         logging.info(f"正在用 InferSent(threshold={threshold}) 替换 USE 约束。")
+        #         new_constraints.append(InferSent(threshold=threshold, metric="cosine"))
+                
+        #         # 用我们新的、不含 TensorFlow 的列表替换掉攻击的约束列表
+        #         attack.constraints = new_constraints
+        #         logging.info("成功！已将 UniversalSentenceEncoder 替换为 PyTorch InferSent。")
+        #     else:
+        #         logging.warning(f"在 {self.args.attack_method} 中未找到 UniversalSentenceEncoder。您的 textattack 版本可能已更新，或者此攻击不需要替换。")
+        #         logging.info(f"正在用 HuggingFaceSentenceEncoder(threshold={threshold}) 替换 USE 约束。")
+
 
         # --- 3. 配置攻击参数 (例如查询预算) ---
         # 尝试设置查询预算。注意：并非所有攻击配方或搜索方法都支持查询预算限制。

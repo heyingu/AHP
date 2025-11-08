@@ -305,3 +305,15 @@ huggingface-cli download --resume-download cross-encoder/nli-roberta-base --loca
 source ahp_env/bin/activate
 export HF_ENDPOINT=https://hf-mirror.com
 huggingface-cli download --resume-download cross-encoder/nli-roberta-base --local-dir autodl-tmp/cache/huggingface/hub/models--cross-encoder--nli-roberta-base
+source ahp_env/bin/activate
+git add .
+git commit -m "8"
+git push
+cd autodl-tmp
+cd cache
+ls -alh
+cd textattack
+ls -alh
+cd ~
+cd nltk_data
+python -m nltk.downloader punkt_tab

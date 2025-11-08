@@ -198,7 +198,7 @@ class AlpacaModel:
         # --- 检查这里的缩进 ---
         if self.roberta_model is None: # <--- 这一行应该和下面的 logging.info 对齐
             logging.info("正在加载 RoBERTa 去噪器 (roberta-large)...")
-            roberta_path = "roberta-large" # 使用 Hugging Face Hub 上的标准 RoBERTa 模型
+            roberta_path = "/root/autodl-tmp/cache/huggingface/hub/models--roberta-large" # 使用 Hugging Face Hub 上的标准 RoBERTa 模型
             # 加载 RoBERTa 的分词器
             # --- 确保下面所有行都相对于 if 语句正确缩进 ---
             self.roberta_tokenizer = transformers.RobertaTokenizer.from_pretrained(roberta_path, cache_dir=self.args.cache_dir)
