@@ -62,7 +62,7 @@ positive
 ### Input:
 {}""",
         
-        # --- 这是您不小心删除的、sst2 的去噪指令 (Few-Shot) ---
+        
         "denoise_explicit": """Fill in the masked word {} with a suitable word. The output sentence must be natural, coherent, and the same length as the input. Respond with the completed sentence directly.
 
 ### Input:
