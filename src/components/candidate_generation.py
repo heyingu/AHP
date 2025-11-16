@@ -7,6 +7,7 @@ from tqdm.auto import tqdm
 
 
 if TYPE_CHECKING:
+
     from ..models.model_loader import AlpacaModel
 # 类型检查导入
 if TYPE_CHECKING:
@@ -22,6 +23,7 @@ class CandidateGenerator:
         Args:
             model_wrapper (AlpacaModel): AlpacaModel 实例, 提供 _denoise_texts 方法。
         """
+        
         self.model_wrapper = model_wrapper
         # --- 确保 RoBERTa 被加载 ---
         try:
@@ -38,8 +40,12 @@ class CandidateGenerator:
         [已修改] 使用 model_wrapper 中的 _denoise_texts 方法 (及 RoBERTa) 
         来生成 K 个候选。
         """
-        num_candidates = self.model_wrapper.args.ahp_num_candidates 
+        # if dataset == 'sst2':
+        #     num_candidates = self.model_wrapper.args.ahp_num_candidates 
+        # else:
+        #     num_candidates = 1
         
+        num_candidates = self.model_wrapper.args.ahp_num_candidates 
         # --- 关键修改 ---
         # 我们不再使用 Alpaca (CausalLM) 来进行 in-filling。
         # 我们调用 _denoise_texts，强制使用 'roberta'。

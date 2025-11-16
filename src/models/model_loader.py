@@ -130,6 +130,12 @@ class AlpacaModel:
 
     def _initialize_maskers(self):
         """根据配置的防御方法，初始化所需的遮蔽器。"""
+        
+        # if self.args.defense_method == 'ahp':
+        #     if self.args.dataset_name == 'sst2':
+        #         self.args.ahp_masking_strategy = 'adversarial'
+        #     else:
+        #         self.args.ahp_masking_strategy = 'random'
         if self.args.defense_method == 'ahp' and self.adversarial_masker is None:
              try:
                  # --- 修改这里 ---
@@ -378,6 +384,8 @@ class AlpacaModel:
         # --- 逐个处理文本 (使用 enumerate 获取索引) ---
         for text_idx, text in enumerate(tqdm(texts, desc="AHP 防御流程", leave=False, ncols=100)):
             try:
+                
+                
                 # 1. 对抗性遮蔽
                 # (现在会调用已完善的 _calculate_word_importance)
                 # masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
@@ -387,8 +395,11 @@ class AlpacaModel:
                     if self.random_masker is None: # 兜底检查
                          raise RuntimeError("AHP-Random 模式需要 RandomMasker，但它未被初始化。")
                     # 注意：RandomMasker.mask_input 使用在 __init__ 中设置的 mask_rate
-                    masked_text, masked_indices = self.random_masker.mask_input(text)
-                    logging.debug(f"AHP [Random] Masked Text: {masked_text}")
+                    masked_texts = self.random_masker.mask_input_multiple(text, self.args.selfdenoise_ensemble_size)
+                    # masked_text, masked_indices = self.random_masker.mask_input(text)
+                    logging.debug(f"AHP [Random] Masked Text: {masked_texts}")
+
+
 
                 else: # 默认 'adversarial'
                     # 1. 对抗性遮蔽
@@ -398,6 +409,9 @@ class AlpacaModel:
                     masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
                     logging.debug(f"AHP [Adversarial] Masked Text: {masked_text}")
 
+
+
+                # print(self.args.ahp_masking_strategy)
                 # 2. 候选生成
                 # (现在会调用已完善的 generate_candidates)
                 candidates = self.candidate_generator.generate_candidates(masked_text)
@@ -462,25 +476,35 @@ class AlpacaModel:
         """
         denoised_texts = []
         if denoiser_type == 'alpaca':
-            # (Alpaca 部分保持不变 - 即使它不能用，我们先保留它)
+            # --- 修复 Alpaca 降噪逻辑 ---
             logging.debug(f"使用 Alpaca 去噪 {len(masked_texts)} 个文本...")
             template = self.denoise_instruction_template
+            
+            # (L489) 找到最后一个占位符
             last_placeholder_idx = template.rfind('{}')
             if last_placeholder_idx == -1:
                 logging.error("去噪指令模板中未找到用于填充输入文本的 '{}' 占位符！")
                 return ["Error: Invalid denoise template"] * len(masked_texts)
 
+            # (L494) 准备模板，用 <MASK> 替换掉 few-shot 示例中的 {}
             temp_marker = "__TEMP_INPUT_PLACEHOLDER__"
             template_with_marker = template[:last_placeholder_idx] + temp_marker + template[last_placeholder_idx+2:]
             instruction_base = template_with_marker.replace('{}', self.args.mask_token)
             final_instruction_template = instruction_base.replace(temp_marker, '{}')
 
-            prompts = [self._format_prompt(final_instruction_template.format(mt), "") for mt in masked_texts]
+            # --- 修复点 1：(L499) ---
+            # 直接构建最终的 prompts 列表，*不要* 再次调用 _format_prompt
+            prompts = [final_instruction_template.format(mt) for mt in masked_texts]
+            
             for i in tqdm(range(0, len(prompts), self.args.model_batch_size), desc="去噪 (Alpaca)", leave=False, ncols=100):
                  batch_prompts = prompts[i:i + self.args.model_batch_size]
-                 gen_max_tokens = int(self.args.max_seq_length * 1.5) 
-                 responses = self._generate_batch(batch_prompts, max_new_tokens=gen_max_tokens)
+                 
+                 # --- 修复点 2：(L501-L502) ---
+                 # 移除 'max_new_tokens' 覆盖，让 _generate_batch (L317) 
+                 # 使用它自己的合理默认值 (max_new_tokens=80)
+                 responses = self._generate_batch(batch_prompts)
                  denoised_texts.extend(responses)
+            # --- Alpaca 修复结束 ---
 
         elif denoiser_type == 'roberta':
             # --- 关键修改：使 RoBERTa 能够采样 ---

@@ -93,8 +93,8 @@ class AhpDefense(BaseDefense):
         self.candidate_generator = CandidateGenerator(self.model, self.tokenizer, num_candidates=self.m_val)
 
     def __call__(self, sentence):
-        masked_text = random_masking(sentence, self.tokenizer)
-        # masked_text = adversarial_masking(sentence, self.model, self.tokenizer)
+        # masked_text = random_masking(sentence, self.tokenizer)
+        masked_text = adversarial_masking(sentence, self.model, self.tokenizer)
         candidates = self.candidate_generator.generate(masked_text)
         pruned_candidates = self.pruner.prune(sentence, candidates)
         
