@@ -34,6 +34,12 @@ class CandidateGenerator:
             logging.error(f"CandidateGenerator 无法加载 RoBERTa: {e}", exc_info=True)
             raise e
 
+    def generate_candidates_list(self, masked_list):
+        all = []
+        for t in masked_list:
+            all.extend(self.generate_candidates(t))
+        return all
+
 
     def generate_candidates(self, masked_text: str) -> List[str]:
         """
@@ -46,6 +52,7 @@ class CandidateGenerator:
         #     num_candidates = 1
         
         num_candidates = self.model_wrapper.args.ahp_num_candidates 
+        # print(num_candidates)
         # --- 关键修改 ---
         # 我们不再使用 Alpaca (CausalLM) 来进行 in-filling。
         # 我们调用 _denoise_texts，强制使用 'roberta'。

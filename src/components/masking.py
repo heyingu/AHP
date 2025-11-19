@@ -193,7 +193,35 @@ class AdversarialMasker:
         logging.debug(f"梯度重要性得分: {word_scores}")
         return word_scores
 
+    def mask_range(self, text, start_pct, end_pct):
+        importance_scores = self._calculate_word_importance(text)
+        tokens = text.split()
+        n = len(tokens)
+    
+        start = int(start_pct * n)
+        end = int(end_pct * n)
+    
+        # 得到按照重要性排序的词索引
+        sorted_idx = np.argsort(importance_scores)[::-1]  # 从高到低
+        target_idx = sorted_idx[start:end]
+    
+        new_tokens = tokens.copy()
+        for i in target_idx:
+            new_tokens[i] = self.mask_token
+    
+        return " ".join(new_tokens)
 
+    def get_full_importance_order(self, text: str) -> List[int]:
+        """
+        返回 importance 从高到低排序后的所有词索引。
+        用于 AHP 分层遮蔽，不改变原始 mask_input 的行为。
+        """
+        importance_scores = self._calculate_word_importance(text)
+        sorted_idx = np.argsort(importance_scores)[::-1].tolist()
+        return sorted_idx
+
+
+    
     def mask_input(self, text: str, mask_rate: float) -> Tuple[str, List[int]]:
         """
         [此方法保持不变]

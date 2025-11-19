@@ -380,93 +380,68 @@ class AlpacaModel:
                  raise RuntimeError("无法初始化 CandidateGenerator")
 
         current_pruner = self._get_pruner() # 获取剪枝器实例
+        pbar = tqdm(texts, desc="AHP 分层防御")
 
-        # --- 逐个处理文本 (使用 enumerate 获取索引) ---
-        for text_idx, text in enumerate(tqdm(texts, desc="AHP 防御流程", leave=False, ncols=100)):
+        for text_idx, text in enumerate(pbar):
             try:
+    
+                masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
                 
-                
-                # 1. 对抗性遮蔽
-                # (现在会调用已完善的 _calculate_word_importance)
-                # masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
-                # logging.debug(f"AHP Masked Text: {masked_text}")
-                if self.args.ahp_masking_strategy == 'random':
-                    # 1. 随机遮蔽
-                    if self.random_masker is None: # 兜底检查
-                         raise RuntimeError("AHP-Random 模式需要 RandomMasker，但它未被初始化。")
-                    # 注意：RandomMasker.mask_input 使用在 __init__ 中设置的 mask_rate
-                    masked_texts = self.random_masker.mask_input_multiple(text, self.args.selfdenoise_ensemble_size)
-                    # masked_text, masked_indices = self.random_masker.mask_input(text)
-                    logging.debug(f"AHP [Random] Masked Text: {masked_texts}")
-
-
-
-                else: # 默认 'adversarial'
-                    # 1. 对抗性遮蔽
-                    if self.adversarial_masker is None: # 兜底检查
-                         raise RuntimeError("AHP-Adversarial 模式需要 AdversarialMasker，但它未被初始化。")
-                    # 注意：AdversarialMasker.mask_input 需要传入 mask_rate
-                    masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
-                    logging.debug(f"AHP [Adversarial] Masked Text: {masked_text}")
-
-
-
-                # print(self.args.ahp_masking_strategy)
-                # 2. 候选生成
-                # (现在会调用已完善的 generate_candidates)
                 candidates = self.candidate_generator.generate_candidates(masked_text)
-                logging.debug(f"Generated {len(candidates)} candidates.")
 
-                # (处理无候选的情况)
+    
+                # --- 无候选 fallback ---
                 if not candidates:
-                    logging.warning(f"No candidates generated for: {text[:50]}... Skipping pruning/prediction.")
-                    candidate_prompts = [self._format_prompt(self.classification_instruction, masked_text)]
+                    candidate_prompts = [
+                        self._format_prompt(self.classification_instruction, masked_text)
+                    ]
                     probs_tensor = self._get_logit_probs_batch(candidate_prompts)
                     all_candidate_probs = probs_tensor.numpy()
                 else:
-                    # 3. 剪枝
+                    # --- 剪枝 ---
                     if current_pruner:
-                        pruned_candidates = current_pruner.prune(original_text=text, candidates=candidates, masked_text=masked_text)
-                        logging.debug(f"Pruned to {len(pruned_candidates)} candidates using {self.args.ahp_pruning_method}.")
+                        pruned_candidates = current_pruner.prune(
+                            original_text=text,
+                            candidates=layer_candidates,
+                            masked_text=masked_text
+                        )
                         if not pruned_candidates:
-                             logging.warning("Pruning removed all candidates. Predicting on original candidates.")
-                             pruned_candidates = candidates 
+                            pruned_candidates = layer_candidates
                     else:
                         pruned_candidates = candidates
-                        logging.debug("No pruning applied.")
-
-                    # 4. 预测 (分批)
-                    candidate_prompts = [self._format_prompt(self.classification_instruction, cand) for cand in pruned_candidates]
+    
+                    # --- 批量分类 ---
+                    candidate_prompts = [
+                        self._format_prompt(self.classification_instruction, cand)
+                        for cand in pruned_candidates
+                    ]
+    
                     candidate_probs_list = []
                     for i in range(0, len(candidate_prompts), self.args.model_batch_size):
                         batch_prompts = candidate_prompts[i:i + self.args.model_batch_size]
                         probs_tensor = self._get_logit_probs_batch(batch_prompts)
                         candidate_probs_list.append(probs_tensor)
-
-                    if not candidate_probs_list:
-                         logging.error(f"Prediction on candidates failed for: {text[:50]}...")
-                         all_candidate_probs = np.array([np.ones(self.num_labels) / self.num_labels])
-                    else:
-                         all_candidate_probs = torch.cat(candidate_probs_list, dim=0).numpy()
-
-                # 5. 结果聚合 (确保 aggregate_results 已正确导入)
-                aggregated_prob = aggregate_results(all_candidate_probs, strategy=self.args.ahp_aggregation_strategy)
+    
+                    all_candidate_probs = torch.cat(candidate_probs_list, dim=0).numpy()
+    
+                # --- 聚合概率 ---
+                aggregated_prob = aggregate_results(
+                    all_candidate_probs,
+                    strategy=self.args.ahp_aggregation_strategy
+                )
                 final_aggregated_probs.append(aggregated_prob)
-                logging.debug(f"Aggregated Prob: {aggregated_prob}")
-
+    
             except Exception as e:
-                logging.error(f"处理文本 '{text[:50]}...' 时 AHP 防御出错: {e}", exc_info=True)
-                uniform_prob = np.ones(self.num_labels) / self.num_labels
-                final_aggregated_probs.append(uniform_prob)
-
-            # --- 显存清理 (使用 text_idx) ---
-            if text_idx % 10 == 0 and text_idx > 0: 
+                logging.error(f"AHP 处理错误: {e}", exc_info=True)
+                final_aggregated_probs.append(np.ones(self.num_labels) / self.num_labels)
+    
+            # 显存清理
+            if (text_idx + 1) % 10 == 0:
                 if torch.cuda.is_available():
-                    logging.debug(f"AHP: 清理显存 (样本 {text_idx})")
                     torch.cuda.empty_cache()
-                    gc.collect()
-
-        logging.info("AHP 防御应用完成。")
+                gc.collect()
+    
+        logging.info("AHP 防御应用完成")
         return final_aggregated_probs
 
 
