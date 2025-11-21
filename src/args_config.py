@@ -50,7 +50,7 @@ class AHPSettings:
                                  help="Threshold for pruning (meaning depends on method).")
         self.parser.add_argument('--ahp_aggregation_strategy', type=str, default='majority_vote', choices=['majority_vote', 'weighted_vote'],
                                  help="Aggregation strategy for AHP.")
-        self.parser.add_argument('--ahp_masking_strategy', type=str, default='adversarial', choices=['adversarial', 'random'],
+        self.parser.add_argument('--ahp_masking_strategy', type=str, default='adversarial', choices=['adversarial', 'random','stochastic'],
                                  help="AHP 内部使用的遮蔽策略：'adversarial' (梯度) 或 'random' (随机)。")
         
         # --- SelfDenoise Specific ---

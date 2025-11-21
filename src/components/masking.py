@@ -211,6 +211,63 @@ class AdversarialMasker:
     
         return " ".join(new_tokens)
 
+    def mask_input_stochastic(self, text: str, mask_rate: float, num_samples: int = 1, temperature: float = 1.0) -> List[str]:
+        """
+        [新功能] 基于梯度的随机采样遮蔽 (Stochastic Adversarial Masking)。
+        结合了 '对抗性遮蔽' 的精准 (高梯度词概率大) 和 '随机遮蔽' 的多样性。
+        """
+        words = text.split()
+        n_words = len(words)
+        if n_words == 0:
+            return [""] * num_samples
+
+        # 计算需要遮蔽的词数
+        n_mask = max(1, int(round(n_words * mask_rate)))
+        n_mask = min(n_mask, n_words)
+
+        # 1. 计算梯度重要性
+        try:
+            importance_scores = self._calculate_word_importance(text)
+        except Exception as e:
+            logging.warning(f"Gradient calculation failed: {e}. Fallback to random.")
+            return RandomMasker(self.model_wrapper.tokenizer).mask_input_multiple(text, num_samples)
+        
+        if len(importance_scores) != n_words:
+            logging.warning("Gradient length mismatch. Fallback to random.")
+            return RandomMasker(self.model_wrapper.tokenizer).mask_input_multiple(text, num_samples)
+
+        # 2. 将梯度转化为概率分布 (Softmax)
+        scores = np.array(importance_scores)
+        # 归一化防止数值过大
+        if scores.max() > 0:
+            scores = scores / scores.max()
+        
+        # 应用温度系数: exp(score / T)
+        # T < 1.0 (如 0.2) 会显著放大高分词的概率（精准打击），同时保留少量随机性（多样性）
+        try:
+            exp_scores = np.exp(scores / temperature)
+            probs = exp_scores / exp_scores.sum()
+        except Exception:
+            probs = scores + 1e-6
+            probs = probs / probs.sum()
+
+        masked_texts = []
+        for _ in range(num_samples):
+            # 3. 根据概率分布无放回采样
+            try:
+                mask_indices = np.random.choice(n_words, size=n_mask, replace=False, p=probs)
+                mask_indices.sort()
+            except ValueError:
+                mask_indices = np.random.choice(n_words, size=n_mask, replace=False)
+                mask_indices.sort()
+
+            masked_words = list(words)
+            for idx in mask_indices:
+                masked_words[idx] = self.mask_token
+            masked_texts.append(" ".join(masked_words))
+
+        return masked_texts
+        
     def get_full_importance_order(self, text: str) -> List[int]:
         """
         返回 importance 从高到低排序后的所有词索引。

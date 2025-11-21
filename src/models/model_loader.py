@@ -357,7 +357,7 @@ class AlpacaModel:
 
 
     def _apply_ahp_defense(self, texts: List[str]) -> List[np.ndarray]:
-        """[已修改] 应用完整的 AHP (对抗性层次处理) 防御流程。"""
+        """[已修改] 应用完整的 AHP (对抗性层次处理) 防御流程。包含随机对抗策略。"""
         logging.info("正在应用 AHP 防御...")
         final_aggregated_probs = []
 
@@ -370,30 +370,84 @@ class AlpacaModel:
         # 确保候选生成器已初始化
         if self.candidate_generator is None:
             try:
-                # --- 修改这里 ---
                 # 实例化时传入 self (AlpacaModel 实例)
                 self.candidate_generator = CandidateGenerator(self)
-                # --- 修改结束 ---
                 logging.info("已初始化候选生成器。")
             except Exception as e:
                  logging.error(f"初始化 CandidateGenerator 时出错: {e}", exc_info=True)
                  raise RuntimeError("无法初始化 CandidateGenerator")
 
         current_pruner = self._get_pruner() # 获取剪枝器实例
-        pbar = tqdm(texts, desc="AHP 分层防御")
+        pbar = tqdm(texts, desc="AHP 分层防御", mininterval=1.0)
 
         for text_idx, text in enumerate(pbar):
             try:
-    
-                masked_text, masked_indices = self.adversarial_masker.mask_input(text, self.args.mask_rate)
+                # ===========================================================
+                # [核心修改] 1. 遮蔽策略分支 (Masking Strategy Branching)
+                # ===========================================================
+                masked_texts_list = []
                 
-                candidates = self.candidate_generator.generate_candidates(masked_text)
+                # 获取目标候选数量 (M值)
+                target_num_candidates = self.args.ahp_num_candidates
 
-    
+                if self.args.ahp_masking_strategy == 'stochastic':
+                    # --- 策略 A: 随机对抗 (Stochastic Adversarial) ---
+                    # 适用于 AGNews: 精准打击(基于梯度) + 多样性(随机采样)
+                    # 成本控制: 1次梯度计算 + M次生成
+                    masked_texts_list = self.adversarial_masker.mask_input_stochastic(
+                        text, 
+                        mask_rate=self.args.mask_rate, 
+                        num_samples=target_num_candidates, 
+                        temperature=0.2 # T=0.2 保证大概率选中攻击词，但保留上下文随机性
+                    )
+                
+                elif self.args.ahp_masking_strategy == 'random':
+                    # --- 策略 B: 纯随机 (Random) ---
+                    # 完全模仿 SelfDenoise 的行为: M次随机遮蔽
+                    if self.random_masker is None:
+                        self._initialize_maskers()
+                    masked_texts_list = self.random_masker.mask_input_multiple(
+                        text, num_masks=target_num_candidates
+                    )
+
+                else: # default: 'adversarial'
+                    # --- 策略 C: 确定性对抗 (Deterministic Adversarial) ---
+                    # 适用于 SST-2: 1-Shot 精准打击
+                    masked_text, _ = self.adversarial_masker.mask_input(text, self.args.mask_rate)
+                    # 对于确定性策略，我们只有一个遮蔽文本，但可能需要生成多个候选(通过采样)
+                    # 这里为了逻辑统一，我们把它放入列表，但只放一个
+                    masked_texts_list = [masked_text]
+
+                # ===========================================================
+                # [核心修改] 2. 统一候选生成 (Unified Candidate Generation)
+                # ===========================================================
+                candidates = []
+                
+                # 如果是多遮蔽模式 (Stochastic/Random)，我们对每个 mask 生成 1 个候选
+                if self.args.ahp_masking_strategy in ['stochastic', 'random']:
+                    for m_text in masked_texts_list:
+                        # 生成 1 个最佳候选
+                        cands = self.candidate_generator.generate_candidates(m_text)
+                        if cands:
+                            candidates.append(cands[0])
+                
+                # 如果是单遮蔽模式 (Adversarial/SST2)，我们从 1 个 mask 生成 M 个候选
+                else:
+                    # 此时 masked_texts_list 只有 1 个元素
+                    # generate_candidates 内部会根据 ahp_num_candidates 生成 M 个
+                    if masked_texts_list:
+                        candidates = self.candidate_generator.generate_candidates(masked_texts_list[0])
+
+                # ===========================================================
+                # 后续流程 (Fallback, Pruning, Prediction)
+                # ===========================================================
+
                 # --- 无候选 fallback ---
                 if not candidates:
+                    # 如果生成失败，回退到使用原始的(或第一个mask的)文本预测
+                    fallback_text = masked_texts_list[0] if masked_texts_list else text
                     candidate_prompts = [
-                        self._format_prompt(self.classification_instruction, masked_text)
+                        self._format_prompt(self.classification_instruction, fallback_text)
                     ]
                     probs_tensor = self._get_logit_probs_batch(candidate_prompts)
                     all_candidate_probs = probs_tensor.numpy()
@@ -402,11 +456,11 @@ class AlpacaModel:
                     if current_pruner:
                         pruned_candidates = current_pruner.prune(
                             original_text=text,
-                            candidates=layer_candidates,
-                            masked_text=masked_text
+                            candidates=candidates,
+                            masked_text=masked_texts_list[0] # 使用第一个 mask 作为参考
                         )
                         if not pruned_candidates:
-                            pruned_candidates = layer_candidates
+                            pruned_candidates = candidates
                     else:
                         pruned_candidates = candidates
     
@@ -422,7 +476,10 @@ class AlpacaModel:
                         probs_tensor = self._get_logit_probs_batch(batch_prompts)
                         candidate_probs_list.append(probs_tensor)
     
-                    all_candidate_probs = torch.cat(candidate_probs_list, dim=0).numpy()
+                    if candidate_probs_list:
+                        all_candidate_probs = torch.cat(candidate_probs_list, dim=0).numpy()
+                    else:
+                        all_candidate_probs = np.array([np.ones(self.num_labels) / self.num_labels])
     
                 # --- 聚合概率 ---
                 aggregated_prob = aggregate_results(
@@ -471,7 +528,7 @@ class AlpacaModel:
             # 直接构建最终的 prompts 列表，*不要* 再次调用 _format_prompt
             prompts = [final_instruction_template.format(mt) for mt in masked_texts]
             
-            for i in tqdm(range(0, len(prompts), self.args.model_batch_size), desc="去噪 (Alpaca)", leave=False, ncols=100):
+            for i in tqdm(range(0, len(prompts), self.args.model_batch_size), desc="去噪 (Alpaca)", leave=False):
                  batch_prompts = prompts[i:i + self.args.model_batch_size]
                  
                  # --- 修复点 2：(L501-L502) ---
@@ -555,7 +612,7 @@ class AlpacaModel:
                   raise RuntimeError("随机遮蔽器未能初始化，无法执行 SelfDenoise 防御。")
 
         # --- 逐个处理输入文本 ---
-        for text_idx, text in enumerate(tqdm(texts, desc="SelfDenoise 防御流程", leave=False, ncols=100)):
+        for text_idx, text in enumerate(tqdm(texts, desc="SelfDenoise 防御流程", leave=False)):
             try:
                 # --- 1. 生成多个随机遮蔽版本 ---
                 # 调用随机遮蔽器的 mask_input_multiple 方法
@@ -633,7 +690,7 @@ class AlpacaModel:
             all_probs = [] # 存储所有批次的概率
             # 分批处理
             # 使用 tqdm 显示预测进度
-            for i in tqdm(range(0, len(prompts), self.args.model_batch_size), desc="无防御预测", leave=False, ncols=100):
+            for i in tqdm(range(0, len(prompts), self.args.model_batch_size), desc="无防御预测", leave=False):
                  batch_prompts = prompts[i:i + self.args.model_batch_size]
                  probs = self._get_logit_probs_batch(batch_prompts) # 获取概率 Tensor
                  all_probs.append(probs)
