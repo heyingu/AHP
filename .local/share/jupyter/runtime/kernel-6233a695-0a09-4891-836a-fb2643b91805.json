@@ -1,0 +1,13 @@
+{
+  "shell_port": 35093,
+  "iopub_port": 50077,
+  "stdin_port": 52833,
+  "control_port": 42573,
+  "hb_port": 54079,
+  "ip": "127.0.0.1",
+  "key": "b6b4bb10-10d180c90f76dfc4c18890e2",
+  "transport": "tcp",
+  "signature_scheme": "hmac-sha256",
+  "kernel_name": "ahp_env",
+  "jupyter_session": "/root/notebooks/02_experiment_robustness_evaluation_all.ipynb"
+}

@@ -379,7 +379,8 @@ class ExperimentRunner:
             'attack_success_rate': attack_success_rate,
             'avg_perturbed_words': avg_perturbed_words,
             'avg_queries': avg_queries,
-            'query_budget': self.args.attack_query_budget # 记录查询预算设置
+            'query_budget': self.args.attack_query_budget ,# 记录查询预算设置
+            'seed': self.args.seed
         }
         # 添加防御相关参数
         if self.args.defense_method != 'none':
