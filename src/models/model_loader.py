@@ -215,10 +215,11 @@ class AlpacaModel:
 
         generate_ids = self.model.generate(
             **inputs, 
-            max_new_tokens=max_new_tokens, 
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
+            max_new_tokens=max_new_tokens,
+            # --- [修复] 关闭采样，回归确定性生成 ---
+            do_sample=False,  # <--- 改为 False
+            # temperature=0.7, # 采样参数不再需要
+            # top_p=0.9,
             num_return_sequences=1,
         )
 
@@ -356,7 +357,7 @@ class AlpacaModel:
     def _denoise_texts(self, masked_texts: List[str], denoiser_type: str) -> List[str]:
         denoised_texts = []
         if denoiser_type == 'alpaca':
-            # logging.debug(f"使用 Alpaca 去噪 {len(masked_texts)} 个文本...")
+            # (Alpaca 逻辑部分保持不变，它会调用上面修复过的 _generate_batch)
             template = self.denoise_instruction_template
             last_placeholder_idx = template.rfind('{}')
             if last_placeholder_idx == -1:
@@ -370,21 +371,19 @@ class AlpacaModel:
 
             prompts = [final_instruction_template.format(mt) for mt in masked_texts]
             
-            # [核心修复] 移除了内部 tqdm
+            # 移除了 tqdm 以避免嵌套刷屏
             for i in range(0, len(prompts), self.args.model_batch_size):
                  batch_prompts = prompts[i:i + self.args.model_batch_size]
                  responses = self._generate_batch(batch_prompts)
                  denoised_texts.extend(responses)
 
         elif denoiser_type == 'roberta':
-            # logging.debug(f"使用 RoBERTa 去噪 {len(masked_texts)} 个文本 (带采样)...")
             self._load_roberta_denoiser() 
 
             roberta_mask_token_id = self.roberta_tokenizer.mask_token_id
             roberta_input_texts = [t.replace(self.args.mask_token, self.roberta_tokenizer.mask_token) for t in masked_texts]
 
             outputs = [] 
-            # [核心修复] 移除了内部 tqdm
             for i in range(0, len(roberta_input_texts), self.args.model_batch_size):
                 batch_texts = roberta_input_texts[i:i+self.args.model_batch_size]
 
@@ -398,10 +397,13 @@ class AlpacaModel:
                 predicted_token_ids = inputs['input_ids'].clone()
 
                 if torch.any(mask_token_indices):
+                    # --- [修复] 回归确定性预测 (Argmax) ---
+                    # 我们需要模型最有把握的预测，而不是随机抽样
                     masked_logits = logits[mask_token_indices]
-                    masked_probs = torch.softmax(masked_logits, dim=-1)
-                    sampled_token_ids = torch.multinomial(masked_probs, num_samples=1).squeeze(-1)
-                    predicted_token_ids[mask_token_indices] = sampled_token_ids
+                    best_token_ids = torch.argmax(masked_logits, dim=-1) # 取概率最大的词
+                    
+                    predicted_token_ids[mask_token_indices] = best_token_ids
+                    # --- 修复结束 ---
 
                 batch_outputs = self.roberta_tokenizer.batch_decode(predicted_token_ids, skip_special_tokens=True)
                 outputs.extend(batch_outputs)
