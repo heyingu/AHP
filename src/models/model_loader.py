@@ -274,7 +274,7 @@ class AlpacaModel:
                         text, 
                         mask_rate=self.args.mask_rate, 
                         num_samples=target_num_candidates, 
-                        temperature=0.2 
+                        temperature=1.0 
                     )
                 
                 elif self.args.ahp_masking_strategy == 'random':

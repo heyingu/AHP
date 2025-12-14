@@ -57,13 +57,13 @@ def aggregate_results(candidate_probs: np.ndarray, strategy: str = 'majority_vot
         logging.debug(f"加权投票聚合后概率: {aggregated_prob}")
         return aggregated_prob
 
-    # elif strategy == 'average_prob':
-    #     # --- 平均概率逻辑 ---
-    #     aggregated_prob = np.mean(candidate_probs, axis=0)
-    #     # 确保概率和为 1
-    #     aggregated_prob /= np.sum(aggregated_prob)
-    #     logging.debug(f"平均概率聚合后概率: {aggregated_prob}")
-    #     return aggregated_prob
+    elif strategy == 'average_prob':
+        # --- 平均概率逻辑 ---
+        aggregated_prob = np.mean(candidate_probs, axis=0)
+        # 确保概率和为 1
+        aggregated_prob /= np.sum(aggregated_prob)
+        logging.debug(f"平均概率聚合后概率: {aggregated_prob}")
+        return aggregated_prob
 
     else:
         logging.error(f"未知的聚合策略: '{strategy}'。将返回均匀分布。")
