@@ -2,7 +2,7 @@
   "base_url": "/jupyter/",
   "hostname": "0.0.0.0",
   "password": false,
-  "pid": 824,
+  "pid": 808,
   "port": 8888,
   "root_dir": "/root",
   "secure": false,

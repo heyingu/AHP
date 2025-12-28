@@ -290,11 +290,19 @@ class AlpacaModel:
 
                 candidates = []
                 
+                # === [性能优化补丁] ===
                 if self.args.ahp_masking_strategy in ['stochastic', 'random']:
-                    for m_text in masked_texts_list:
-                        cands = self.candidate_generator.generate_candidates(m_text)
-                        if cands:
-                            candidates.append(cands[0])
+                    # 优化路径：批量 1-to-1 生成，避免 K*K 的计算冗余
+                    # 之前的逻辑: 对每个 masked_text 生成 K 个候选但只用第一个
+                    # 现在的逻辑: 对所有 masked_texts 一次性 RoBERTa，直接返回等长的候选
+                    logging.debug(
+                        f"[AHP Optimization] Using generate_one_per_mask for {len(masked_texts_list)} masks"
+                    )
+                    candidates = self.candidate_generator.generate_one_per_mask(masked_texts_list)
+                    
+                    if not candidates:
+                        logging.warning(f"AHP Stochastic 模式下生成了空候选列表，回退到原始文本")
+                        candidates = masked_texts_list  # 回退方案
                 else:
                     if masked_texts_list:
                         candidates = self.candidate_generator.generate_candidates(masked_texts_list[0])
@@ -378,36 +386,87 @@ class AlpacaModel:
                  denoised_texts.extend(responses)
 
         elif denoiser_type == 'roberta':
-            self._load_roberta_denoiser() 
-
+            self._load_roberta_denoiser()
             roberta_mask_token_id = self.roberta_tokenizer.mask_token_id
             roberta_input_texts = [t.replace(self.args.mask_token, self.roberta_tokenizer.mask_token) for t in masked_texts]
-
-            outputs = [] 
-            for i in range(0, len(roberta_input_texts), self.args.model_batch_size):
-                batch_texts = roberta_input_texts[i:i+self.args.model_batch_size]
-
-                inputs = self.roberta_tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True, max_length=self.args.max_seq_length)
-                inputs = {k: v.to(self.device) for k, v in inputs.items()} 
-
-                with torch.no_grad(): 
-                    logits = self.roberta_model(**inputs).logits 
-
+            
+            outputs = []
+            
+            # === [性能优化补丁] RoBERTa 独立批大小 ===
+            # RoBERTa-Large 只有 300M 参数，远小于 Alpaca-7B。
+            # 不应该用 Alpaca 的 batch_size（可能是 4），而应该用更大的值。
+            # 根据显存调整：
+            #   - 24GB VRAM: 32-48
+            #   - 40GB VRAM: 64-96
+            #   - 80GB VRAM: 128-256
+            roberta_batch_size = 32  # ← 根据你的显存改这个值
+            
+            logging.debug(
+                f"[RoBERTa Optimization] Processing {len(roberta_input_texts)} texts with batch_size={roberta_batch_size}"
+            )
+            
+            for i in range(0, len(roberta_input_texts), roberta_batch_size):
+                batch_texts = roberta_input_texts[i:i + roberta_batch_size]
+                
+                inputs = self.roberta_tokenizer(
+                    batch_texts, 
+                    return_tensors="pt", 
+                    padding=True, 
+                    truncation=True, 
+                    max_length=self.args.max_seq_length
+                )
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                
+                with torch.no_grad():
+                    logits = self.roberta_model(**inputs).logits
+                
                 mask_token_indices = (inputs['input_ids'] == roberta_mask_token_id)
                 predicted_token_ids = inputs['input_ids'].clone()
-
+                
                 if torch.any(mask_token_indices):
-                    # --- [修复] 回归确定性预测 (Argmax) ---
-                    # 我们需要模型最有把握的预测，而不是随机抽样
+                    # 使用 argmax（确定性），而非采样
                     masked_logits = logits[mask_token_indices]
-                    best_token_ids = torch.argmax(masked_logits, dim=-1) # 取概率最大的词
-                    
+                    best_token_ids = torch.argmax(masked_logits, dim=-1)
                     predicted_token_ids[mask_token_indices] = best_token_ids
-                    # --- 修复结束 ---
-
-                batch_outputs = self.roberta_tokenizer.batch_decode(predicted_token_ids, skip_special_tokens=True)
+                
+                batch_outputs = self.roberta_tokenizer.batch_decode(
+                    predicted_token_ids, 
+                    skip_special_tokens=True
+                )
                 outputs.extend(batch_outputs)
+            
             denoised_texts = outputs
+
+            # self._load_roberta_denoiser() 
+
+            # roberta_mask_token_id = self.roberta_tokenizer.mask_token_id
+            # roberta_input_texts = [t.replace(self.args.mask_token, self.roberta_tokenizer.mask_token) for t in masked_texts]
+
+            # outputs = [] 
+            # for i in range(0, len(roberta_input_texts), self.args.model_batch_size):
+            #     batch_texts = roberta_input_texts[i:i+self.args.model_batch_size]
+
+            #     inputs = self.roberta_tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True, max_length=self.args.max_seq_length)
+            #     inputs = {k: v.to(self.device) for k, v in inputs.items()} 
+
+            #     with torch.no_grad(): 
+            #         logits = self.roberta_model(**inputs).logits 
+
+            #     mask_token_indices = (inputs['input_ids'] == roberta_mask_token_id)
+            #     predicted_token_ids = inputs['input_ids'].clone()
+
+            #     if torch.any(mask_token_indices):
+            #         # --- [修复] 回归确定性预测 (Argmax) ---
+            #         # 我们需要模型最有把握的预测，而不是随机抽样
+            #         masked_logits = logits[mask_token_indices]
+            #         best_token_ids = torch.argmax(masked_logits, dim=-1) # 取概率最大的词
+                    
+            #         predicted_token_ids[mask_token_indices] = best_token_ids
+            #         # --- 修复结束 ---
+
+            #     batch_outputs = self.roberta_tokenizer.batch_decode(predicted_token_ids, skip_special_tokens=True)
+            #     outputs.extend(batch_outputs)
+            # denoised_texts = outputs
             
         else:
              raise ValueError(f"未知的去噪器类型: {denoiser_type}")

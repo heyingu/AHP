@@ -79,3 +79,49 @@ class CandidateGenerator:
         logging.debug(f"RoBERTa 生成了 {len(candidates)} 个候选, 其中 {len(unique_candidates)} 个是唯一的。")
         
         return unique_candidates
+
+    def generate_one_per_mask(self, masked_texts: List[str]) -> List[str]:
+        """
+        [优化补丁] 针对 AHP Stochastic/Random 模式的批量 1-to-1 生成。
+        
+        背景：原本的设计是"对每个 masked_text 调 generate_candidates，生成 K 个但只取第一个"。
+             这导致大量浪费的 RoBERTa 推理。
+        
+        优化：直接对整个 masked_texts 列表批量进行 RoBERTa 推理，1 对 1 填充。
+        
+        Args:
+            masked_texts: 一批掩码文本，来自梯度采样或随机采样。
+        
+        Returns:
+            等长的候选文本列表，每个 masked_text 对应一个填充结果。
+        """
+        if not masked_texts:
+            logging.warning("generate_one_per_mask 收到空列表")
+            return []
+        
+        logging.debug(
+            f"[Optimized] 批量 1-to-1 去噪: {len(masked_texts)} 个 masks → RoBERTa 推理"
+        )
+        
+        try:
+            # 直接利用 _denoise_texts 的底层批处理能力
+            # RoBERTa 会在内部进行批量推理，避免了之前的重复采样
+            candidates = self.model_wrapper._denoise_texts(
+                masked_texts,
+                denoiser_type='roberta'
+            )
+            
+            # 简单清洗：去掉前后空格
+            cleaned = [c.strip() for c in candidates if isinstance(c, str)]
+            
+            if len(cleaned) != len(masked_texts):
+                logging.warning(
+                    f"RoBERTa 去噪后候选数量不一致: 输入 {len(masked_texts)}, 输出 {len(cleaned)}"
+                )
+            
+            return cleaned
+        
+        except Exception as e:
+            logging.error(f"generate_one_per_mask 异常: {e}", exc_info=True)
+            # 降级处理：返回原始掩码文本
+            return [t.strip() for t in masked_texts]
