@@ -393,7 +393,13 @@ class ExperimentRunner:
              elif self.args.defense_method == 'ahp':
                  results_summary.update({
                      'ahp_pruning': self.args.ahp_pruning_method,
-                     'ahp_aggregation': self.args.ahp_aggregation_strategy
+                     'ahp_aggregation': self.args.ahp_aggregation_strategy,
+                     'ahp_temperature': str(self.args.ahp_temperature),
+                     'ensemble_size': self.args.ahp_num_candidates,
+                 })
+             elif self.args.defense_method == 'topk':
+                 results_summary.update({
+                     'ensemble_size': self.args.topk_ensemble_size,
                  })
 
         # (追加逻辑同 evaluate 方法)

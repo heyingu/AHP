@@ -95,7 +95,7 @@ class AlpacaModel:
         self._initialize_maskers()
 
     def _initialize_maskers(self):
-        if self.args.defense_method == 'ahp' and self.adversarial_masker is None:
+        if (self.args.defense_method == 'ahp' or self.args.defense_method == 'topk') and self.adversarial_masker is None:
              try:
                  self.adversarial_masker = AdversarialMasker(self) 
                  logging.info("已初始化 AHP 所需的对抗性遮蔽器。")
@@ -274,7 +274,7 @@ class AlpacaModel:
                         text, 
                         mask_rate=self.args.mask_rate, 
                         num_samples=target_num_candidates, 
-                        temperature=1.0 
+                        temperature=self.args.ahp_temperature
                     )
                 
                 elif self.args.ahp_masking_strategy == 'random':
@@ -362,7 +362,7 @@ class AlpacaModel:
         return final_aggregated_probs
 
 
-    def _denoise_texts(self, masked_texts: List[str], denoiser_type: str) -> List[str]:
+    def _denoise_texts(self, masked_texts: List[str], denoiser_type: str ,do_sample: bool = False) -> List[str]:
         denoised_texts = []
         if denoiser_type == 'alpaca':
             # (Alpaca 逻辑部分保持不变，它会调用上面修复过的 _generate_batch)
@@ -426,7 +426,15 @@ class AlpacaModel:
                 if torch.any(mask_token_indices):
                     # 使用 argmax（确定性），而非采样
                     masked_logits = logits[mask_token_indices]
-                    best_token_ids = torch.argmax(masked_logits, dim=-1)
+                    if do_sample:
+                        # [修改] 使用随机采样 (Multinomial)
+                        # 温度设为 1.0，可以根据需要调整
+                        probs = torch.softmax(masked_logits, dim=-1)
+                        best_token_ids = torch.multinomial(probs, num_samples=1).squeeze(-1)
+                    else:
+                        # [修改] 使用确定性 Argmax
+                        best_token_ids = torch.argmax(masked_logits, dim=-1)
+                    # best_token_ids = torch.argmax(masked_logits, dim=-1)
                     predicted_token_ids[mask_token_indices] = best_token_ids
                 
                 batch_outputs = self.roberta_tokenizer.batch_decode(
@@ -526,6 +534,76 @@ class AlpacaModel:
         return aggregated_probs_list
 
 
+    def _apply_topk_defense(self, texts: List[str]) -> List[np.ndarray]:
+            """
+            TopK 防御实现：
+            1. 梯度排序：识别并遮蔽 Top K% 最可能受攻击的词 (Deterministic)。
+            2. 随机填充：使用 RoBERTa 对该遮蔽文本进行多次采样填充 (Ensemble)。
+            3. 投票：聚合预测结果。
+            """
+            aggregated_probs_list = []
+            
+            # 确保初始化了梯度计算所需的 AdversarialMasker
+            if self.adversarial_masker is None:
+                 self._initialize_maskers()
+                 if self.adversarial_masker is None:
+                      raise RuntimeError("TopK 需要 AdversarialMasker 来计算梯度，但初始化失败。")
+            
+            ensemble_size = self.args.topk_ensemble_size
+            
+            for text_idx, text in enumerate(texts):
+                try:
+                    # 1. 梯度排序与遮蔽 (产生 1 个遮蔽文本)
+                    # mask_input 内部已经实现了: 计算梯度 -> 排序 -> 遮蔽 Top N
+                    masked_text, _ = self.adversarial_masker.mask_input(text, self.args.mask_rate)
+                    
+                    # 2. 构造 Ensemble 输入
+                    # 将同一个 masked_text 复制 N 份
+                    masked_texts_batch = [masked_text] * ensemble_size
+                    
+                    # 3. 随机填充 (RoBERTa Sampling)
+                    # 关键点：开启 do_sample=True，使得即使输入相同，输出也不同
+                    denoised_candidates = self._denoise_texts(
+                        masked_texts_batch, 
+                        denoiser_type='roberta', # 强制使用 RoBERTa，因为它支持 MaskedLM 采样
+                        do_sample=True 
+                    )
+                    
+                    # 4. 预测与投票
+                    candidate_prompts = [self._format_prompt(self.classification_instruction, cand) for cand in denoised_candidates]
+                    candidate_probs_list = [] 
+                    
+                    for i in range(0, len(candidate_prompts), self.args.model_batch_size):
+                        batch_prompts = candidate_prompts[i : i + self.args.model_batch_size]
+                        probs = self._get_logit_probs_batch(batch_prompts) 
+                        candidate_probs_list.append(probs)
+    
+                    if not candidate_probs_list:
+                        all_candidate_probs = np.array([np.ones(self.num_labels) / self.num_labels])
+                    else:
+                        all_candidate_probs = torch.cat(candidate_probs_list, dim=0).numpy()
+    
+                    # 多数投票
+                    predictions = np.argmax(all_candidate_probs, axis=1)
+                    votes = np.bincount(predictions, minlength=self.num_labels)
+                    majority_class = np.argmax(votes)
+    
+                    final_prob = np.zeros(self.num_labels)
+                    final_prob[majority_class] = 1.0
+                    aggregated_probs_list.append(final_prob)
+    
+                except Exception as e:
+                    logging.error(f"TopK 防御出错: {e}", exc_info=True)
+                    aggregated_probs_list.append(np.ones(self.num_labels) / self.num_labels)
+    
+                if (text_idx + 1) % 50 == 0:
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+    
+            return aggregated_probs_list
+    
+
     def predict_batch(self, texts: List[str]) -> List[np.ndarray]:
         if self.args.defense_method == 'none':
             # logging.debug("正在执行无防御预测...")
@@ -549,6 +627,8 @@ class AlpacaModel:
             return self._apply_ahp_defense(texts)
         elif self.args.defense_method == 'selfdenoise':
             return self._apply_selfdenoise_defense(texts)
+        elif self.args.defense_method == 'topk':
+            return self._apply_topk_defense(texts)
         else:
             raise ValueError(f"未知的防御方法: {self.args.defense_method}")
 

@@ -34,7 +34,7 @@ class AHPSettings:
 
 
         # === Defense ===
-        self.parser.add_argument('--defense_method', type=str, default='none', choices=['none', 'ahp', 'selfdenoise'],
+        self.parser.add_argument('--defense_method', type=str, default='none', choices=['none', 'ahp', 'selfdenoise','topk'],
                                  help="Defense method to apply: 'none', 'ahp', or 'selfdenoise'.")
         self.parser.add_argument('--mask_token', type=str, default='<unk>',
                                  help="Token used for masking.")
@@ -52,15 +52,20 @@ class AHPSettings:
                                  help="Aggregation strategy for AHP.")
         self.parser.add_argument('--ahp_masking_strategy', type=str, default='adversarial', choices=['adversarial', 'random','stochastic'],
                                  help="AHP 内部使用的遮蔽策略：'adversarial' (梯度) 或 'random' (随机)。")
+        self.parser.add_argument('--ahp_temperature', type=float, default=1.0,
+                                 help="Temperature for AHP stochastic gradient masking (scaling factor).")
         
         # --- SelfDenoise Specific ---
         self.parser.add_argument('--selfdenoise_ensemble_size', type=int, default=50,
                                  help="Number of masked samples for SelfDenoise prediction ensemble.")
+
         # self.parser.add_argument('--selfdenoise_certify_ensemble', type=int, default=1000,
         #                          help="Number of masked samples for SelfDenoise certification (larger).") # Certify mode暂不实现
         self.parser.add_argument('--selfdenoise_denoiser', type=str, default='alpaca', choices=['alpaca', 'roberta'],
                                  help="Model to use for denoising in SelfDenoise.")
-
+        
+        self.parser.add_argument('--topk_ensemble_size', type=int, default=20,
+                                 help="[TopK] Number of candidates to generate (via RoBERTa sampling) for the single gradient-masked text.")
         # === Attack ===
         self.parser.add_argument('--attack_method', type=str, default='textbugger', choices=['textbugger', 'textfooler', 'pwws', 'bae', 'deepwordbug', 'bertattack','pruthi'],
                                  help="TextAttack recipe to use.")
