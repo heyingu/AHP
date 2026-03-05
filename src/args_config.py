@@ -67,7 +67,7 @@ class AHPSettings:
         self.parser.add_argument('--topk_ensemble_size', type=int, default=20,
                                  help="[TopK] Number of candidates to generate (via RoBERTa sampling) for the single gradient-masked text.")
         # === Attack ===
-        self.parser.add_argument('--attack_method', type=str, default='textbugger', choices=['textbugger', 'textfooler', 'pwws', 'bae', 'deepwordbug', 'bertattack','pruthi'],
+        self.parser.add_argument('--attack_method', type=str, default='textbugger', choices=['textbugger', 'textfooler', 'none','pwws', 'bae', 'deepwordbug', 'bertattack','pruthi'],
                                  help="TextAttack recipe to use.")
         self.parser.add_argument('--attack_query_budget', type=int, default=100,
                                  help="Maximum number of model queries allowed per attack.")

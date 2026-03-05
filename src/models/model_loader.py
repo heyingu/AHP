@@ -239,7 +239,7 @@ class AlpacaModel:
         outputs = self.model(**inputs)
         last_token_logits = outputs.logits[:, -1, :]
         label_logits = last_token_logits[:, self.label_tokens]
-        label_probs = torch.softmax(label_logits, dim=-1)
+        label_probs = torch.softmax(label_logits.to(torch.float32), dim=-1)
         return label_probs.cpu()
 
 

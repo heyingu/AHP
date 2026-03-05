@@ -31,7 +31,10 @@ from textattack.constraints.pre_transformation import (
 from textattack.constraints.semantics.sentence_encoders.infer_sent import InferSent # (PyTorch-based)
 from textattack.constraints.semantics.sentence_encoders.universal_sentence_encoder import UniversalSentenceEncoder # (TensorFlow-based)
 # --- 修复结束 ---
-
+from textattack.transformations import Transformation  # <--- 修复 NameError 的关键
+from textattack.search_methods import GreedySearch
+from textattack.goal_functions import UntargetedClassification
+from textattack import Attack
 
 # --- 导入本项目模块 ---
 try:
@@ -44,6 +47,22 @@ except ImportError as e:
      raise # 导入失败是严重错误，直接抛出
 
 
+class IdentityTransformation(Transformation):
+    """不进行任何修改的转换器"""
+    def _get_transformations(self, current_text, indices_to_modify):
+        return [] # 不返回任何候选，确保原始文本不被修改
+
+class IdentityAttack:
+    @staticmethod
+    def build(model_wrapper):
+        # 目标函数：判断是否攻击成功
+        goal_function = UntargetedClassification(model_wrapper)
+        # 转换器：不修改任何内容
+        transformation = IdentityTransformation()
+        # 搜索方法：贪婪搜索（因为没有转换，它会直接结束）
+        search_method = GreedySearch()
+        return Attack(goal_function, [], transformation, search_method)
+        
 # --- 定义 TextAttack 模型包装器 ---
 class AlpacaModelWrapper(ModelWrapper):
     """
@@ -135,6 +154,8 @@ class ExperimentRunner:
             return BERTAttackLi2020
         elif attack_name == 'pruthi': # <--- 添加此行
             return Pruthi2019
+        elif attack_name == 'none':
+            return IdentityAttack
         else:
             # 如果配置了未知的攻击方法，则抛出错误
             raise ValueError(f"未知的攻击方法: {self.args.attack_method}")
@@ -211,6 +232,42 @@ class ExperimentRunner:
         final_accuracy = correct_count / total_count if total_count > 0 else 0
         logging.info(f"评估完成。最终准确率 ({self.args.defense_method} 防御下): {final_accuracy:.2%}")
         # ... (保存结果的代码) ...
+        # --- 在 evaluate 方法末尾添加以下代码 ---
+        results_summary = {
+            'dataset': self.args.dataset_name,
+            'model': os.path.basename(self.args.model_path),
+            'defense': self.args.defense_method,
+            'attack': 'none',  # evaluate 模式下攻击为 none
+            'num_examples': total_count,
+            'accuracy': final_accuracy,
+            'attack_success_rate': 0.0,
+            'avg_perturbed_words': 0.0,
+            'avg_queries': 0.0,
+            'seed': self.args.seed
+        }
+        
+        # 添加防御参数（保持与 attack 方法一致的格式）
+        if self.args.defense_method != 'none':
+            results_summary['mask_rate'] = self.args.mask_rate
+            if self.args.defense_method == 'ahp':
+                results_summary.update({
+                    'ahp_pruning': self.args.ahp_pruning_method,
+                    'ahp_aggregation': self.args.ahp_aggregation_strategy,
+                    'ahp_temperature': str(self.args.ahp_temperature),
+                    'ensemble_size': self.args.ahp_num_candidates,
+                })
+
+        df_new = pd.DataFrame([results_summary])
+        try:
+            if os.path.exists(self.args.results_file):
+                df_existing = pd.read_csv(self.args.results_file)
+                df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+            else:
+                df_combined = df_new
+            df_combined.to_csv(self.args.results_file, index=False)
+            logging.info(f"评估摘要结果已追加到: {self.args.results_file}")
+        except Exception as e:
+            logging.error(f"保存评估摘要结果失败: {e}")
 
 
     def attack(self):
