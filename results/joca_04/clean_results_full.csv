@@ -1,0 +1,7 @@
+dataset,model,defense,attack,num_examples,accuracy,attack_success_rate,avg_perturbed_words,avg_queries,seed,mask_rate,ahp_pruning,ahp_aggregation,ahp_temperature,ensemble_size
+sst2,alpaca-native,topk,none,872,0.7305045871559633,0.0,0.0,0.0,123,0.15,,,,
+sst2,alpaca-native,selfdenoise,none,872,0.7236238532110092,0.0,0.0,0.0,123,0.15,,,,
+sst2,alpaca-native,ahp,none,872,0.7282110091743119,0.0,0.0,0.0,123,0.15,none,majority_vote,1.0,50.0
+agnews,alpaca-native,topk,none,1000,0.764,0.0,0.0,0.0,123,0.15,,,,
+agnews,alpaca-native,selfdenoise,none,1000,0.692,0.0,0.0,0.0,123,0.15,,,,
+agnews,alpaca-native,ahp,none,1000,0.698,0.0,0.0,0.0,123,0.15,none,majority_vote,1.0,50.0

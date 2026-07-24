@@ -1,0 +1,2 @@
+dataset,model,defense,attack,num_examples,accuracy,attack_success_rate,avg_perturbed_words,avg_queries,seed
+agnews,alpaca-native,none,none,100,0.7,0.0,0.0,0.0,123

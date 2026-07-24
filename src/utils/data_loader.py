@@ -108,10 +108,10 @@ def load_dataset(dataset_path: str, dataset_name:str, split: str = 'test', num_e
 
                      # test.txt (假设没有标签)
                      if split == 'test':
-                         text = line
-                         label_id = 0 # 伪标签
-                         raw_data.append((text, label_id))
-                         count += 1
+                        raise ValueError(
+                            "SST-2 test split has no public ground-truth labels. "
+                            "Use split='validation' for accuracy evaluation."
+                        )
                      else: 
                          # train.txt, validation.txt 等 (假设格式为 "text\tlabel")
                          # --- 修复开始 ---

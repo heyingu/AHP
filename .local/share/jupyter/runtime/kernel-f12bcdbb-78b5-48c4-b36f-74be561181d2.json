@@ -1,0 +1,13 @@
+{
+  "shell_port": 49427,
+  "iopub_port": 39513,
+  "stdin_port": 48055,
+  "control_port": 41591,
+  "hb_port": 50681,
+  "ip": "127.0.0.1",
+  "key": "751d2226-92a991d479e0dba389901618",
+  "transport": "tcp",
+  "signature_scheme": "hmac-sha256",
+  "kernel_name": "ahp_env",
+  "jupyter_session": "/root/notebooks/04_joca_supplementary_experiments_v2.ipynb"
+}

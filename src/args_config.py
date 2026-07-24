@@ -29,7 +29,7 @@ class AHPSettings:
                                  help="Base path to the dataset directory.")
         self.parser.add_argument('--num_examples', type=int, default=100,
                                  help="Number of examples from the test set to use for evaluation/attack.")
-        self.parser.add_argument('--max_seq_length', type=int, default=128,
+        self.parser.add_argument('--max_seq_length', type=int, default=512,
                                  help="Maximum sequence length for tokenization.")
 
 

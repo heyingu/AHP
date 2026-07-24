@@ -1,0 +1,4 @@
+temperature,ensemble_size,mask_rate,seed,sweep_name,sweep_value
+1.0,50,0.15,123,mask_rate,0.15
+1.0,50,0.2,123,mask_rate,0.2
+1.0,50,0.25,123,mask_rate,0.25

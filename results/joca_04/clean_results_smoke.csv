@@ -1,0 +1,4 @@
+dataset,model,defense,attack,num_examples,accuracy,attack_success_rate,avg_perturbed_words,avg_queries,seed,mask_rate,ahp_pruning,ahp_aggregation,ahp_temperature,ensemble_size
+agnews,alpaca-native,topk,none,20,0.85,0.0,0.0,0.0,123,0.15,,,,
+agnews,alpaca-native,selfdenoise,none,20,0.75,0.0,0.0,0.0,123,0.15,,,,
+agnews,alpaca-native,ahp,none,20,0.7,0.0,0.0,0.0,123,0.15,none,majority_vote,1.0,50.0

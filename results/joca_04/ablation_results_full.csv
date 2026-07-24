@@ -1,0 +1,13 @@
+dataset,model,defense,attack,num_examples,accuracy,clean_accuracy_on_attack_set,conditional_robust_accuracy,overall_robust_accuracy,attack_success_rate,num_successes,num_failures,num_skipped,valid_examples,avg_perturbed_words,avg_queries,query_budget,seed,mask_rate,ahp_pruning,ahp_aggregation,ahp_temperature,ensemble_size
+agnews,alpaca-native,ahp,pruthi,50,0.75,0.8,0.75,0.6,0.25,10,30,10,40,1.0,200.0,200,123,0.15,none,majority_vote,0.1,50
+agnews,alpaca-native,ahp,pruthi,50,0.7428571428571429,0.7,0.7428571428571429,0.52,0.2571428571428571,9,26,15,35,1.0,200.0,200,123,0.15,none,majority_vote,0.5,50
+agnews,alpaca-native,ahp,pruthi,50,0.7575757575757576,0.66,0.7575757575757576,0.5,0.2424242424242424,8,25,17,33,1.0,200.0,200,123,0.15,none,majority_vote,1.0,50
+agnews,alpaca-native,ahp,pruthi,50,0.71875,0.64,0.71875,0.46,0.28125,9,23,18,32,1.0,200.0,200,123,0.15,none,majority_vote,2.0,50
+agnews,alpaca-native,ahp,pruthi,50,0.6470588235294118,0.68,0.6470588235294118,0.44,0.3529411764705882,12,22,16,34,1.0,200.0,200,123,0.15,none,majority_vote,5.0,50
+agnews,alpaca-native,ahp,pruthi,50,0.65625,0.64,0.65625,0.42,0.34375,11,21,18,32,1.0,200.0,200,123,0.15,none,majority_vote,1.0,5
+agnews,alpaca-native,ahp,pruthi,50,0.6666666666666666,0.66,0.6666666666666666,0.44,0.3333333333333333,11,22,17,33,1.0,200.0,200,123,0.15,none,majority_vote,1.0,10
+agnews,alpaca-native,ahp,pruthi,50,0.7878787878787878,0.66,0.7878787878787878,0.52,0.2121212121212121,7,26,17,33,1.0,200.0,200,123,0.15,none,majority_vote,1.0,20
+agnews,alpaca-native,ahp,pruthi,50,0.71875,0.64,0.71875,0.46,0.28125,9,23,18,32,1.0,200.0,200,123,0.05,none,majority_vote,1.0,50
+agnews,alpaca-native,ahp,pruthi,50,0.75,0.64,0.75,0.48,0.25,8,24,18,32,1.0,200.0,200,123,0.1,none,majority_vote,1.0,50
+agnews,alpaca-native,ahp,pruthi,50,0.7837837837837838,0.74,0.7837837837837838,0.58,0.2162162162162162,8,29,13,37,1.0,200.0,200,123,0.2,none,majority_vote,1.0,50
+agnews,alpaca-native,ahp,pruthi,50,0.7368421052631579,0.76,0.7368421052631579,0.56,0.2631578947368421,10,28,12,38,1.0,200.0,200,123,0.25,none,majority_vote,1.0,50

@@ -1,0 +1,17 @@
+dataset,model,defense,attack,num_examples,accuracy,attack_success_rate,avg_perturbed_words,avg_queries,seed,query_budget,mask_rate,ahp_pruning,ahp_aggregation,ahp_temperature,ensemble_size
+agnews,alpaca-native,none,none,1000,0.267,0.0,0.0,0.0,123,,,,,,
+sst2,alpaca-native,none,none,1000,0.553,0.0,0.0,0.0,123,,,,,,
+sst2,alpaca-native,none,pwws,872,0.717948717948718,0.282051282051282,1.45,86.32307692307693,123,100.0,,,,,
+sst2,alpaca-native,none,deepwordbug,872,0.3576923076923077,0.6423076923076924,3.325349301397205,31.35897435897436,123,100.0,,,,,
+sst2,alpaca-native,none,pruthi,872,0.7384615384615385,0.2615384615384615,1.0,96.72051282051282,123,100.0,,,,,
+agnews,alpaca-native,none,pruthi,1000,0.3595505617977528,0.6404494382022472,1.0,200.0,123,200.0,,,,,
+agnews,alpaca-native,none,deepwordbug,1000,0.097378277153558,0.902621722846442,2.3568464730290457,57.9250936329588,123,200.0,,,,,
+agnews,alpaca-native,none,pwws,1000,0.6891385767790262,0.3108614232209737,1.2048192771084338,186.5205992509364,123,200.0,,,,,
+sst2,alpaca-native,none,none,872,1.0,0.0,0.0,1.0,123,100.0,,,,,
+sst2,alpaca-native,ahp,none,872,1.0,0.0,0.0,1.0,123,100.0,0.15,none,majority_vote,1.0,50.0
+sst2,alpaca-native,ahp,none,1000,0.568,0.0,0.0,0.0,123,,0.15,none,majority_vote,1.0,50.0
+sst2,alpaca-native,selfdenoise,none,1000,0.572,0.0,0.0,0.0,123,,0.15,,,,
+sst2,alpaca-native,topk,none,1000,0.55,0.0,0.0,0.0,123,,0.15,,,,
+agnews,alpaca-native,topk,none,1000,0.274,0.0,0.0,0.0,123,,0.15,,,,
+agnews,alpaca-native,selfdenoise,none,1000,0.261,0.0,0.0,0.0,123,,0.15,,,,
+agnews,alpaca-native,ahp,none,1000,0.276,0.0,0.0,0.0,123,,0.15,none,majority_vote,1.0,50.0

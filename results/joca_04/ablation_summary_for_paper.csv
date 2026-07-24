@@ -1,0 +1,4 @@
+sweep_name,sweep_value,conditional_robust_accuracy_mean,conditional_robust_accuracy_std,conditional_robust_accuracy_count,overall_robust_accuracy_mean,overall_robust_accuracy_std,overall_robust_accuracy_count,attack_success_rate_mean,attack_success_rate_std,attack_success_rate_count,avg_queries_mean,avg_queries_std,avg_queries_count
+mask_rate,0.15,0.7575757575757576,,1,0.5,,1,0.2424242424242424,,1,200.0,,1
+mask_rate,0.2,0.7837837837837838,,1,0.58,,1,0.2162162162162162,,1,200.0,,1
+mask_rate,0.25,0.7368421052631579,,1,0.56,,1,0.2631578947368421,,1,200.0,,1

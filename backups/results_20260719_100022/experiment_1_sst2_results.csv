@@ -1,0 +1,5 @@
+筛选规则 (Pruning Rule),任务准确率 (Task Accuracy),计算开销 (s/sample)
+perplexity,0.57,2.7480903315544127
+clustering,0.56,2.6933772444725035
+nli,0.55,2.7459585428237916
+semantic,0.53,2.6995914125442506

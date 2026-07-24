@@ -180,7 +180,27 @@ class ExperimentRunner:
         logging.info(f"正在加载原始数据用于评估: {self.args.dataset_name} (最多 {self.args.num_examples} 个样本)")
         try:
             # 直接调用 load_dataset 函数获取原始 (文本, 标签) 列表
-            raw_data = load_dataset(self.args.dataset_full_path, self.args.dataset_name, split='test', num_examples=self.args.num_examples)
+            # SST-2 test split does not provide public labels.
+            # Use validation for labeled clean evaluation.
+            eval_split = (
+                'validation'
+                if self.args.dataset_name == 'sst2'
+                else 'test'
+            )
+            
+            logging.info(
+                "Clean evaluation split: dataset=%s, split=%s",
+                self.args.dataset_name,
+                eval_split,
+            )
+            
+            raw_data = load_dataset(
+                self.args.dataset_full_path,
+                self.args.dataset_name,
+                split=eval_split,
+                num_examples=self.args.num_examples,
+            )
+            # raw_data = load_dataset(self.args.dataset_full_path, self.args.dataset_name, split='test', num_examples=self.args.num_examples)
             if not raw_data:
                 logging.error("未能加载到用于评估的数据。")
                 return # 无法继续评估
@@ -383,62 +403,166 @@ class ExperimentRunner:
 
         # 计算指标
         # 在计算准确率和攻击成功率时，通常排除被跳过的样本
-        valid_examples_count = num_successes + num_failures # 未被跳过的样本总数
+        # valid_examples_count = num_successes + num_failures # 未被跳过的样本总数
 
-        # 原始准确率 (在未被跳过的样本中，攻击失败的比例)
-        original_accuracy = num_failures / valid_examples_count if valid_examples_count > 0 else 0
-        # 攻击后准确率 (同上，因为攻击失败意味着模型在对抗样本上预测正确)
-        accuracy_under_attack = original_accuracy
+        # # 原始准确率 (在未被跳过的样本中，攻击失败的比例)
+        # original_accuracy = num_failures / valid_examples_count if valid_examples_count > 0 else 0
+        # # 攻击后准确率 (同上，因为攻击失败意味着模型在对抗样本上预测正确)
+        # accuracy_under_attack = original_accuracy
 
-        # 攻击成功率 (在未被跳过的样本中，攻击成功的比例)
-        attack_success_rate = num_successes / valid_examples_count if valid_examples_count > 0 else 0
+        # # 攻击成功率 (在未被跳过的样本中，攻击成功的比例)
+        # attack_success_rate = num_successes / valid_examples_count if valid_examples_count > 0 else 0
 
-        # 计算平均扰动词数 (仅对攻击成功的样本) 和平均查询次数 (对所有未跳过样本)
+        # # 计算平均扰动词数 (仅对攻击成功的样本) 和平均查询次数 (对所有未跳过样本)
+        # perturbed_word_counts = []
+        # query_counts = []
+        # for r in results:
+        #      # 只统计未跳过的样本的查询次数
+        #      if r.perturbed_result.goal_status != GoalFunctionResultStatus.SKIPPED:
+        #          query_counts.append(r.num_queries)
+        #          # 只统计攻击成功的样本的扰动词数
+        #          if r.perturbed_result.goal_status == GoalFunctionResultStatus.SUCCEEDED:
+        #              try:
+        #                 # 尝试调用 TextAttack 的方法获取修改词数 (方法名可能随版本变化)
+        #                 # 这是一个常用的计算方式：比较原始文本和扰动后文本的差异
+        #                 words_changed = len(r.original_result.attacked_text.all_words_diff(r.perturbed_result.attacked_text))
+        #                 perturbed_word_counts.append(words_changed)
+        #              except Exception as e: # 如果方法不存在或出错，记录警告
+        #                 logging.warning(f"无法计算样本的扰动词数: {e}")
+        #                 perturbed_word_counts.append(0) # 记为 0
+
+        # avg_perturbed_words = np.mean(perturbed_word_counts) if perturbed_word_counts else 0
+        # avg_queries = np.mean(query_counts) if query_counts else 0
+        
+        # # 打印摘要日志
+        # logging.info(f"总样本数: {num_results}")
+        # logging.info(f"攻击成功数: {num_successes}")
+        # logging.info(f"攻击失败数: {num_failures}")
+        # logging.info(f"跳过样本数 (原始预测错误): {num_skipped}")
+        # logging.info(f"原始准确率 (未跳过样本): {original_accuracy:.2%}")
+        # logging.info(f"攻击后准确率 (未跳过样本): {accuracy_under_attack:.2%}")
+        # logging.info(f"攻击成功率 (未跳过样本): {attack_success_rate:.2%}")
+        # logging.info(f"平均扰动词数 (成功样本): {avg_perturbed_words:.2f}")
+        # logging.info(f"平均查询次数 (未跳过样本): {avg_queries:.2f}")
+
+        # # --- 8. 将摘要结果追加到主 CSV 文件 ---
+        # results_summary = {
+        #     'dataset': self.args.dataset_name,
+        #     'model': os.path.basename(self.args.model_path),
+        #     'defense': self.args.defense_method,
+        #     'attack': self.args.attack_method,
+        #     'num_examples': num_results, # 可以记录总数或有效数，这里用总数
+        #     'accuracy': accuracy_under_attack, # 记录攻击后的准确率
+        #     'attack_success_rate': attack_success_rate,
+        #     'avg_perturbed_words': avg_perturbed_words,
+        #     'avg_queries': avg_queries,
+        #     'query_budget': self.args.attack_query_budget ,# 记录查询预算设置
+        #     'seed': self.args.seed
+        # }
+        valid_examples_count = num_successes + num_failures
+
+        # 原始模型在当前攻击数据集上的干净准确率：
+        # 被 TextAttack 跳过的样本通常是原始预测错误的样本。
+        clean_accuracy_on_attack_set = (
+            valid_examples_count / num_results
+            if num_results > 0
+            else 0.0
+        )
+        
+        # 仅在原始分类正确的样本上计算的鲁棒准确率。
+        conditional_robust_accuracy = (
+            num_failures / valid_examples_count
+            if valid_examples_count > 0
+            else 0.0
+        )
+        
+        # 在全部样本上计算的攻击后准确率。
+        overall_robust_accuracy = (
+            num_failures / num_results
+            if num_results > 0
+            else 0.0
+        )
+        
+        attack_success_rate = (
+            num_successes / valid_examples_count
+            if valid_examples_count > 0
+            else 0.0
+        )
+
+        # JOCA_ATTACK_METRICS_PATCH_V2
         perturbed_word_counts = []
         query_counts = []
-        for r in results:
-             # 只统计未跳过的样本的查询次数
-             if r.perturbed_result.goal_status != GoalFunctionResultStatus.SKIPPED:
-                 query_counts.append(r.num_queries)
-                 # 只统计攻击成功的样本的扰动词数
-                 if r.perturbed_result.goal_status == GoalFunctionResultStatus.SUCCEEDED:
-                     try:
-                        # 尝试调用 TextAttack 的方法获取修改词数 (方法名可能随版本变化)
-                        # 这是一个常用的计算方式：比较原始文本和扰动后文本的差异
-                        words_changed = len(r.original_result.attacked_text.all_words_diff(r.perturbed_result.attacked_text))
-                        perturbed_word_counts.append(words_changed)
-                     except Exception as e: # 如果方法不存在或出错，记录警告
-                        logging.warning(f"无法计算样本的扰动词数: {e}")
-                        perturbed_word_counts.append(0) # 记为 0
 
-        avg_perturbed_words = np.mean(perturbed_word_counts) if perturbed_word_counts else 0
-        avg_queries = np.mean(query_counts) if query_counts else 0
+        for result in results:
+            status = result.perturbed_result.goal_status
 
-        # 打印摘要日志
-        logging.info(f"总样本数: {num_results}")
-        logging.info(f"攻击成功数: {num_successes}")
-        logging.info(f"攻击失败数: {num_failures}")
-        logging.info(f"跳过样本数 (原始预测错误): {num_skipped}")
-        logging.info(f"原始准确率 (未跳过样本): {original_accuracy:.2%}")
-        logging.info(f"攻击后准确率 (未跳过样本): {accuracy_under_attack:.2%}")
-        logging.info(f"攻击成功率 (未跳过样本): {attack_success_rate:.2%}")
-        logging.info(f"平均扰动词数 (成功样本): {avg_perturbed_words:.2f}")
-        logging.info(f"平均查询次数 (未跳过样本): {avg_queries:.2f}")
+            if status != GoalFunctionResultStatus.SKIPPED:
+                query_value = getattr(result, "num_queries", None)
+                if query_value is not None:
+                    query_counts.append(float(query_value))
 
-        # --- 8. 将摘要结果追加到主 CSV 文件 ---
+            if status == GoalFunctionResultStatus.SUCCEEDED:
+                try:
+                    changed_words = (
+                        result.original_result.attacked_text.all_words_diff(
+                            result.perturbed_result.attacked_text
+                        )
+                    )
+                    perturbed_word_counts.append(len(changed_words))
+                except Exception as metric_error:
+                    logging.warning(
+                        "无法计算扰动词数: %s",
+                        metric_error,
+                    )
+
+        avg_perturbed_words = (
+            float(np.mean(perturbed_word_counts))
+            if perturbed_word_counts
+            else 0.0
+        )
+        avg_queries = (
+            float(np.mean(query_counts))
+            if query_counts
+            else 0.0
+        )
+
         results_summary = {
             'dataset': self.args.dataset_name,
             'model': os.path.basename(self.args.model_path),
             'defense': self.args.defense_method,
             'attack': self.args.attack_method,
-            'num_examples': num_results, # 可以记录总数或有效数，这里用总数
-            'accuracy': accuracy_under_attack, # 记录攻击后的准确率
+            'num_examples': num_results,
+        
+            # 为兼容旧表，accuracy 暂时保存条件鲁棒准确率。
+            'accuracy': conditional_robust_accuracy,
+        
+            'clean_accuracy_on_attack_set': clean_accuracy_on_attack_set,
+            'conditional_robust_accuracy': conditional_robust_accuracy,
+            'overall_robust_accuracy': overall_robust_accuracy,
             'attack_success_rate': attack_success_rate,
+        
+            'num_successes': num_successes,
+            'num_failures': num_failures,
+            'num_skipped': num_skipped,
+            'valid_examples': valid_examples_count,
+        
             'avg_perturbed_words': avg_perturbed_words,
             'avg_queries': avg_queries,
-            'query_budget': self.args.attack_query_budget ,# 记录查询预算设置
-            'seed': self.args.seed
+            'query_budget': self.args.attack_query_budget,
+            'seed': self.args.seed,
         }
+        logging.info(
+            f"攻击前干净准确率: {clean_accuracy_on_attack_set:.2%}"
+        )
+        logging.info(
+            f"条件鲁棒准确率: {conditional_robust_accuracy:.2%}"
+        )
+        logging.info(
+            f"整体鲁棒准确率: {overall_robust_accuracy:.2%}"
+        )
+        logging.info(
+            f"攻击成功率: {attack_success_rate:.2%}"
+        )
         # 添加防御相关参数
         if self.args.defense_method != 'none':
              results_summary['mask_rate'] = self.args.mask_rate

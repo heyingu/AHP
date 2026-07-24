@@ -1,0 +1,4 @@
+防御方法 (Defense),原始准确率 (Clean Acc),攻击后准确率 (Attack Acc),攻击成功率 (ASR)
+No Defense (Baseline),0.54,0.54,0.0
+AHP-NLI Defense,0.6,0.6,0.037037037037037035
+Self-Denoise Defense,0.56,0.56,0.037037037037037035

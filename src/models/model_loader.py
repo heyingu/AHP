@@ -60,10 +60,10 @@ a stirring , funny and finally transporting re-imagining of beauty and the beast
 ### Input:
 {}""",
         "label_map": {"negative": 0, "positive": 1}, 
-        "label_tokens": [29940, 9135] 
+        "label_tokens": [8178, 6374] 
     },
     "agnews": {
-        "classification": """Classify the news article based on its title and description into one of the four categories: World, Sports, Business, or Science/Technology. Respond with the category name only.
+        "classification": """Classify the news article based on its title and description into one of the four categories: World, Sports, Business, or Technology. Respond with the category name only.
 
 ### Input:
 {}""",
@@ -72,7 +72,7 @@ a stirring , funny and finally transporting re-imagining of beauty and the beast
 ### Input:
 {}""",
         "label_map": {"World": 0, "Sports": 1, "Business": 2, "Technology": 3}, 
-        "label_tokens": [14058, 29903, 16890, 7141] 
+        "label_tokens": [2787, 12453, 15197, 17968] 
     }
 }
 
